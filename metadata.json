@@ -1,0 +1,5 @@
+{
+  "name": "NeuroTwine",
+  "description": "A next-generation interactive storytelling platform powered by Gemini. Create node-based stories with AI-generated text, images, and Javascript interactions.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>twAIne - AI Interactive Fiction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ReactFlow CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reactflow/dist/style.css" />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              gray: {
+                750: '#2d3748',
+                850: '#1a202c',
+                950: '#0d1117',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #0d1117;
+        color: #e2e8f0;
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1a202c; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4a5568; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #718096; 
+      }
+      
+      /* ReactFlow Custom Styles */
+      .react-flow__edge-path {
+        stroke: #6366f1 !important;
+        stroke-width: 2px !important;
+      }
+      .react-flow__edge.selected .react-flow__edge-path {
+        stroke: #818cf8 !important;
+        stroke-width: 3px !important;
+      }
+      .react-flow__edge:hover .react-flow__edge-path {
+        stroke: #a5b4fc !important;
+      }
+      .react-flow__connection-line {
+        stroke: #8b5cf6 !important;
+        stroke-width: 2px !important;
+        stroke-dasharray: 5 5;
+      }
+      .react-flow__controls {
+        background: #262626 !important;
+        border: 1px solid #404040 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+      }
+      .react-flow__controls-button {
+        background: #262626 !important;
+        border-color: #404040 !important;
+        fill: #a3a3a3 !important;
+      }
+      .react-flow__controls-button:hover {
+        background: #404040 !important;
+        fill: #e5e5e5 !important;
+      }
+      .react-flow__minimap {
+        background: #171717 !important;
+        border: 1px solid #404040 !important;
+        border-radius: 8px !important;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.395.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "reactflow": "https://aistudiocdn.com/reactflow@^11.11.4",
+    "date-fns": "https://aistudiocdn.com/date-fns@^4.1.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
