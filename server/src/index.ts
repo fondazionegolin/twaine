@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import { connectDatabase } from './config/database.js';
 import authRoutes from './routes/auth.js';
 import storiesRoutes from './routes/stories.js';
+import imagesRoutes from './routes/images.js';
+
 
 // Load environment variables
 dotenv.config();
@@ -33,6 +35,15 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limit for image generation (more restrictive due to computational cost)
+const imageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // 10 image generations per 15 minutes
+  message: { error: 'Too many image generation requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // CORS configuration
 const corsOptions = {
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -55,6 +66,8 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/stories', storiesRoutes);
+app.use('/api/images', imageLimiter, imagesRoutes);
+
 
 // 404 handler
 app.use((req, res) => {
@@ -70,9 +83,15 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start server
 const startServer = async () => {
   try {
-    // Connect to database
-    await connectDatabase();
-    
+    // Try to connect to database (optional - server will work without it for image generation)
+    try {
+      await connectDatabase();
+      console.log('✅ Connected to MongoDB');
+    } catch (dbError) {
+      console.warn('⚠️  MongoDB not available - some features will be limited');
+      console.warn('   (Image generation will still work)');
+    }
+
     // Start listening
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);

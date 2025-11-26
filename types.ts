@@ -18,6 +18,9 @@ export interface StoryNode {
   mediaPrompt?: string; // Prompt for image or video generation
   mediaUri?: string; // Base64 for image, or video URI
   mediaType?: 'image' | 'video'; // 'image' by default
+  imageModel?: 'flux-schnell' | 'flux-dev-gguf' | 'sdxl'; // Image generation model
+  imageWidth?: number; // Image width (default 512)
+  imageHeight?: number; // Image height (default 512)
   interactionDescription?: string;
   interactionCode?: string; // JS Body
   codeChatHistory?: ChatMessage[]; // Chat history for iterative code editing

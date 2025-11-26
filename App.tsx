@@ -50,7 +50,7 @@ const executeInteraction = (code: string, gameState: any, log: (msg: string) => 
 
 const AppContent: React.FC = () => {
     const { user, logout, isLoading: authLoading } = useAuth();
-    
+
     const [nodes, setNodes] = useState<StoryNode[]>([]); // Our internal StoryNode[]
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [prompt, setPrompt] = useState(""); // Master prompt for the story
@@ -116,7 +116,7 @@ const AppContent: React.FC = () => {
     // Load saved stories from database on mount (when user is available)
     useEffect(() => {
         if (!user) return;
-        
+
         const loadStories = async () => {
             try {
                 const loaded = await DatabaseService.loadUserStories(user.id);
@@ -125,14 +125,14 @@ const AppContent: React.FC = () => {
                 console.error('Failed to load stories:', err);
             }
         };
-        
+
         loadStories();
     }, [user]);
 
     // Save stories to database whenever they change
     useEffect(() => {
         if (!user) return;
-        
+
         savedStories.forEach(story => {
             DatabaseService.saveStory(story).catch(err => {
                 console.error('Failed to save story:', err);
@@ -158,7 +158,7 @@ const AppContent: React.FC = () => {
         if (nodes.length === 0 && !prompt.trim()) return;
 
         const currentState = JSON.stringify({ nodes, prompt });
-        
+
         // Don't create duplicate versions for the same state
         if (currentState === lastSavedState) return;
 
@@ -182,11 +182,11 @@ const AppContent: React.FC = () => {
         if (!currentStoryId && nodes.length > 0 && user) {
             const newStoryId = crypto.randomUUID();
             setCurrentStoryId(newStoryId);
-            
+
             const existingStoryNames = savedStories.map(s => s.name);
             const newStoryName = DatabaseService.getNewStoryName(existingStoryNames);
             setStoryName(newStoryName);
-            
+
             const newStory: SavedStory = {
                 id: newStoryId,
                 userId: user.id,
@@ -199,14 +199,14 @@ const AppContent: React.FC = () => {
                 versions: [newVersion],
                 lastAutoSave: Date.now()
             };
-            
+
             setSavedStories(prev => [...prev, newStory]);
         } else if (currentStoryId) {
             // Update existing story
             setSavedStories(prev => prev.map(story =>
                 story.id === currentStoryId
-                    ? { 
-                        ...story, 
+                    ? {
+                        ...story,
                         nodes: nodes,
                         masterPrompt: prompt,
                         worldSettings: worldSettings,
@@ -247,7 +247,7 @@ const AppContent: React.FC = () => {
         setNodes(JSON.parse(JSON.stringify(version.nodes)));
         setPrompt(version.masterPrompt);
         setShowVersionHistory(false);
-        
+
         // Create a new version marking the restore
         setTimeout(() => {
             createVersion(`Restored to version from ${new Date(version.timestamp).toLocaleString()}`);
@@ -302,7 +302,7 @@ const AppContent: React.FC = () => {
     // Auto-save when style changes
     useEffect(() => {
         if (viewMode !== 'EDITOR' || !currentStoryId || !currentStyle) return;
-        
+
         setSavedStories(prev => prev.map(story =>
             story.id === currentStoryId
                 ? { ...story, style: currentStyle }
@@ -408,7 +408,7 @@ const AppContent: React.FC = () => {
         setNodes(prevNodes => {
             const sourceNode = prevNodes.find(n => n.id === sourceId);
             const targetNode = prevNodes.find(n => n.id === targetId);
-            
+
             return prevNodes.map(node => {
                 if (node.id === sourceId) {
                     // Prevent duplicate connections
@@ -421,9 +421,9 @@ const AppContent: React.FC = () => {
                         targetNodeId: targetId,
                         label: targetNode?.title || "Next"
                     };
-                    
+
                     pendingActionRef.current = `Connected "${sourceNode?.title}" → "${targetNode?.title}"`;
-                    
+
                     return {
                         ...node,
                         connections: [...node.connections, newConnection]
@@ -581,7 +581,7 @@ const AppContent: React.FC = () => {
         setStoryName(story.name); // Load story name
         setSelectedNodeId(null);
         setViewMode('EDITOR');
-        
+
         // Load version history
         setStoryVersions(story.versions || []);
         setLastSavedState(JSON.stringify({ nodes: story.nodes, prompt: story.masterPrompt }));
@@ -682,7 +682,7 @@ const AppContent: React.FC = () => {
 
             return updatedNodes;
         });
-        
+
         // Track the action from AI
         trackAction(result.message || `AI: ${result.action}`);
     }, [trackAction]);
@@ -1112,7 +1112,7 @@ const AppContent: React.FC = () => {
                                         <div className="space-y-4">
                                             <h2
                                                 className="text-4xl font-bold"
-                                                style={{ 
+                                                style={{
                                                     color: currentStyle?.accentColor || '#60a5fa',
                                                     fontFamily: currentStyle?.titleFontFamily || currentStyle?.fontFamily,
                                                     fontSize: currentStyle?.titleFontSize || '2.5rem'
@@ -1120,7 +1120,7 @@ const AppContent: React.FC = () => {
                                             >
                                                 {currentNode.title}
                                             </h2>
-                                            <p 
+                                            <p
                                                 className="leading-relaxed whitespace-pre-line"
                                                 style={{ fontSize: currentStyle?.textFontSize || '1.125rem' }}
                                             >

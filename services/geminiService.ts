@@ -2,19 +2,22 @@ import { GoogleGenAI, Type } from "@google/genai";
 import Anthropic from '@anthropic-ai/sdk';
 import { StoryNode, WorldSettings, StoryStyle, ChatMessage } from "../types";
 
-// Helper to get a new Gemini client instance right before each API call
-const getGeminiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Helper to get Gemini client
+const getGeminiClient = () => new GoogleGenAI({
+  apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
+});
 
-// Helper to get Anthropic client
+// Helper to get Anthropic client (fallback)
 const getAnthropicClient = () => new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  dangerouslyAllowBrowser: true // Required for client-side usage
+  apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
+  dangerouslyAllowBrowser: true
 });
 
 // Models
-const MODEL_TEXT = "gemini-2.5-flash";
-const MODEL_IMAGE = "gemini-2.5-flash-image";
-const MODEL_VIDEO = "veo-3.1-fast-generate-preview"; // Fast video generation model
+const MODEL_TEXT = "gemini-2.0-flash-exp";
+const MODEL_IMAGE = "gemini-2.0-flash-exp";
+const MODEL_VIDEO = "veo-2-generate-preview";
+
 
 // Helper function to retry operations with exponential backoff
 async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 5, initialDelay = 2000, onStatusUpdate?: (msg: string) => void): Promise<T> {
@@ -216,7 +219,7 @@ export const generateNodeText = async (
       return response.text || "";
     } catch (error) {
       console.warn("Gemini failed, falling back to Claude...", error);
-      
+
       // Fallback to Claude
       const anthropic = getAnthropicClient();
       const msg = await anthropic.messages.create({
@@ -238,20 +241,27 @@ export const generateNodeText = async (
 /**
  * Generates an image or video using the appropriate model.
  */
-export const generateNodeMedia = async (mediaPrompt: string, mediaType: 'image' | 'video', onStatusUpdate?: (msg: string) => void): Promise<string> => {
+export const generateNodeMedia = async (
+  mediaPrompt: string,
+  mediaType: 'image' | 'video',
+  model: 'flux-schnell' | 'flux-dev-gguf' | 'sdxl' = 'flux-schnell',
+  width: number = 512,
+  height: number = 512,
+  onStatusUpdate?: (msg: string) => void
+): Promise<string> => {
   return retryOperation(async () => {
     if (mediaType === 'image') {
-      // Use local Flux API server for image generation
+      // Call image.golinelli.ai directly for image generation
       // @ts-ignore - Vite env variables
-      const FLUX_API_URL = import.meta.env.VITE_FLUX_API_URL || 'http://192.168.1.95:8000';
+      const FLUX_API_URL = import.meta.env.VITE_FLUX_API_URL || 'https://image.golinelli.ai';
       // @ts-ignore - Vite env variables
       const FLUX_API_KEY = import.meta.env.VITE_FLUX_API_KEY;
-      
+
       if (!FLUX_API_KEY) {
         throw new Error("VITE_FLUX_API_KEY not configured. Please add it to .env.local");
       }
 
-      if (onStatusUpdate) onStatusUpdate("Generating image with Flux...");
+      if (onStatusUpdate) onStatusUpdate(`Generating image with ${model}...`);
 
       const response = await fetch(`${FLUX_API_URL}/generate`, {
         method: "POST",
@@ -261,10 +271,10 @@ export const generateNodeMedia = async (mediaPrompt: string, mediaType: 'image' 
         },
         body: JSON.stringify({
           prompt: mediaPrompt,
-          model_id: "flux-schnell",
-          steps: 4,
-          width: 1280,  // 16:9 aspect ratio
-          height: 720
+          model_id: model,
+          steps: 3,  // Reduced from 4 for faster generation
+          width: width,
+          height: height
         })
       });
 
@@ -274,13 +284,13 @@ export const generateNodeMedia = async (mediaPrompt: string, mediaType: 'image' 
       }
 
       const result = await response.json();
-      
+
       // Response format: { image_base64: "...", message: "Success" }
       if (result.image_base64) {
         // Convert base64 to data URL
         return `data:image/png;base64,${result.image_base64}`;
       }
-      
+
       throw new Error(result.message || "Failed to generate image");
     } else { // mediaType === 'video'
       // Check API key for paid models
@@ -426,7 +436,7 @@ export const generateStoryStyle = async (stylePrompt: string): Promise<StoryStyl
       throw new Error("Failed to generate style");
     } catch (error) {
       console.warn("Gemini failed, falling back to Claude...", error);
-      
+
       // Fallback to Claude
       const anthropic = getAnthropicClient();
       const msg = await anthropic.messages.create({
@@ -440,7 +450,7 @@ export const generateStoryStyle = async (stylePrompt: string): Promise<StoryStyl
 
       const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
       if (!text) throw new Error("No text returned from Claude");
-      
+
       // Extract JSON from Claude's response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -457,50 +467,88 @@ export const generateStoryStyle = async (stylePrompt: string): Promise<StoryStyl
  */
 export const generateInteractionCode = async (description: string, worldSettings: WorldSettings, currentStyle?: StoryStyle): Promise<string> => {
   let systemInstruction = `
-      You are an expert JavaScript developer for interactive fiction games.
+      You are an expert JavaScript developer for interactive fiction games that run in web browsers.
       Generate safe, executable JavaScript code based on the user's description.
+      
       The code will run in a sandboxed environment where:
   - 'gameState' is a global object for storing state.
       - 'log(message)' is a function to display text to the player.
       - 'renderGame(htmlString)' is a function to render interactive HTML elements in a dedicated container.
       - 'container' is the HTMLElement for the interactive game area.
 
+    CRITICAL BROWSER REQUIREMENTS:
+  - Games are played in a BROWSER using KEYBOARD and MOUSE
+      - ALWAYS add keyboard event listeners (keydown, keyup) for games
+      - ALWAYS add mouse event listeners (click, mousedown, mouseup, mousemove) for interactive elements
+      - Use addEventListener() for ALL interactive elements - NEVER use inline onclick attributes
+      - Test for common keys: Space, Enter, Arrow keys, WASD, etc.
+      
+    ACCESSIBILITY & CONTRAST REQUIREMENTS:
+  - Text MUST be readable with high contrast against background
+      - Use contrasting colors (light text on dark bg, or dark text on light bg)
+      - Add text shadows or backgrounds if needed for readability
+      - Example: text-shadow: 0 0 4px rgba(0,0,0,0.8) for light text on varied backgrounds
+      
     IMPORTANT:
-  - Use 'gameState'(lowercase) for all state variables.
+  - Use 'gameState' (lowercase) for all state variables.
       - Do NOT use 'State' or 'state'.
       - Do NOT use 'alert()', 'prompt()', or 'confirm()'.
       - For interactive elements, use 'renderGame()' to inject HTML.
-      - You can add event listeners to elements created with renderGame().
+      - ALWAYS add event listeners AFTER rendering HTML.
       
       Available Systems:
   `;
 
   if (worldSettings.useInventory) {
-    systemInstruction += `\n - gameState.inventory: string[](player's items)`;
+    systemInstruction += `\n - gameState.inventory: string[] (player's items)`;
   }
-if (worldSettings.useEconomy) {
-  systemInstruction += `\n- gameState.gold: number (player's currency)`;
-}
-if (worldSettings.useCombat) {
-  systemInstruction += `\n- gameState.hp: number (player's health)`;
-  systemInstruction += `\n- gameState.maxHp: number (player's max health)`;
-}
+  if (worldSettings.useEconomy) {
+    systemInstruction += `\n- gameState.gold: number (player's currency)`;
+  }
+  if (worldSettings.useCombat) {
+    systemInstruction += `\n- gameState.hp: number (player's health)`;
+    systemInstruction += `\n- gameState.maxHp: number (player's max health)`;
+  }
 
-// Add style information if available
-if (currentStyle) {
-  systemInstruction += `\n\nSTYLE THEME (use these colors for harmonious design):`;
-  systemInstruction += `\n- Background: ${currentStyle.background}`;
-  systemInstruction += `\n- Text Color: ${currentStyle.textColor}`;
-  systemInstruction += `\n- Accent Color: ${currentStyle.accentColor}`;
-  systemInstruction += `\n- Font Family: ${currentStyle.fontFamily}`;
-  systemInstruction += `\n\nWhen creating HTML with renderGame(), use these colors to match the story's aesthetic.`;
-  systemInstruction += `\nExample: background-color: ${currentStyle.background}; color: ${currentStyle.textColor}; border-color: ${currentStyle.accentColor};`;
-}
+  // Add style information if available
+  if (currentStyle) {
+    systemInstruction += `\n\nSTYLE THEME (use these colors for harmonious design):`;
+    systemInstruction += `\n- Background: ${currentStyle.background}`;
+    systemInstruction += `\n- Text Color: ${currentStyle.textColor}`;
+    systemInstruction += `\n- Accent Color: ${currentStyle.accentColor}`;
+    systemInstruction += `\n- Font Family: ${currentStyle.fontFamily}`;
+    systemInstruction += `\n\nWhen creating HTML with renderGame(), use these colors to match the story's aesthetic.`;
+    systemInstruction += `\nIMPORTANT: Ensure text color (${currentStyle.textColor}) has good contrast with background.`;
+    systemInstruction += `\nIf background is light, use dark text. If background is dark, use light text.`;
+    systemInstruction += `\nAdd text-shadow for better readability: text-shadow: 0 0 4px rgba(0,0,0,0.8);`;
+  }
 
-systemInstruction += `\n\nExamples:
-      - Simple: log("You found a sword!"); gameState.inventory.push("sword");
-      - Interactive: renderGame('<button onclick="alert(\\'clicked!\\')">Click me</button>');
-      - Mini-game: Create interactive HTML/Canvas games using renderGame() with the style colors above
+  systemInstruction += `\n\nEXAMPLES OF CORRECT CODE:
+
+// Example 1: Button with click listener
+renderGame('<button id="myBtn" style="padding: 10px; background: #4CAF50; color: white; border: none; cursor: pointer;">Click Me</button>');
+document.getElementById('myBtn').addEventListener('click', () => {
+  log('Button clicked!');
+  gameState.score = (gameState.score || 0) + 1;
+});
+
+// Example 2: Keyboard game
+renderGame('<div id="game" style="width: 400px; height: 300px; background: #222; color: #fff; padding: 20px; text-shadow: 0 0 4px rgba(0,0,0,0.8);">Press SPACE to jump!</div>');
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') {
+    log('You jumped!');
+  }
+});
+
+// Example 3: Mouse tracking
+renderGame('<canvas id="canvas" width="400" height="300" style="border: 2px solid #fff; background: #000;"></canvas>');
+const canvas = document.getElementById('canvas');
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  // Draw at mouse position
+});
       
       FORMATTING RULES:
       - Return ONLY the JavaScript code, no markdown, no explanations.
@@ -508,48 +556,49 @@ systemInstruction += `\n\nExamples:
       - Put each statement on its own line.
       - Add line breaks between logical sections.
       - Format the code for readability.
+      - ALWAYS add event listeners for interactive elements.
     `;
 
-try {
-  return await retryOperation(async () => {
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: MODEL_TEXT,
-      contents: description,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7
+  try {
+    return await retryOperation(async () => {
+      const ai = getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: MODEL_TEXT,
+        contents: description,
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.7
+        }
+      });
+
+      if (response.text) {
+        let code = response.text.trim();
+        code = code.replace(/```javascript\n?/g, '').replace(/```\n?/g, '');
+        return code;
       }
+      throw new Error("Failed to generate interaction code");
+    });
+  } catch (error) {
+    console.warn("Gemini failed, falling back to Claude...", error);
+
+    // Fallback to Claude
+    const anthropic = getAnthropicClient();
+    const msg = await anthropic.messages.create({
+      model: "claude-3-haiku-20240307",
+      max_tokens: 4000,
+      system: systemInstruction,
+      messages: [
+        { role: "user", content: description }
+      ]
     });
 
-    if (response.text) {
-      let code = response.text.trim();
-      code = code.replace(/```javascript\n?/g, '').replace(/```\n?/g, '');
-      return code;
-    }
-    throw new Error("Failed to generate interaction code");
-  });
-} catch (error) {
-  console.warn("Gemini failed, falling back to Claude...", error);
+    let code = msg.content[0].type === 'text' ? msg.content[0].text : '';
+    if (!code) throw new Error("No code returned from Claude");
 
-  // Fallback to Claude
-  const anthropic = getAnthropicClient();
-  const msg = await anthropic.messages.create({
-    model: "claude-3-haiku-20240307",
-    max_tokens: 4000,
-    system: systemInstruction,
-    messages: [
-      { role: "user", content: description }
-    ]
-  });
-
-  let code = msg.content[0].type === 'text' ? msg.content[0].text : '';
-  if (!code) throw new Error("No code returned from Claude");
-
-  // Clean up markdown
-  code = code.trim().replace(/```javascript\n?/g, '').replace(/```\n?/g, '');
-  return code;
-}
+    // Clean up markdown
+    code = code.trim().replace(/```javascript\n?/g, '').replace(/```\n?/g, '');
+    return code;
+  }
 };
 
 /**
@@ -810,9 +859,9 @@ Only include the fields relevant to the action. The "message" field is always re
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              action: { 
-                type: Type.STRING, 
-                enum: ["add_nodes", "modify_nodes", "delete_nodes", "update_connections"] 
+              action: {
+                type: Type.STRING,
+                enum: ["add_nodes", "modify_nodes", "delete_nodes", "update_connections"]
               },
               nodesToAdd: {
                 type: Type.ARRAY,
@@ -903,12 +952,12 @@ Only include the fields relevant to the action. The "message" field is always re
 
       const claudeText = claudeMsg.content[0].type === 'text' ? claudeMsg.content[0].text : '';
       if (!claudeText) throw new Error("No response from Claude");
-      
+
       // Clean up potential markdown
       let cleanJson = claudeText.trim();
       cleanJson = cleanJson.replace(/^```(?:json)?\n?/gm, '');
       cleanJson = cleanJson.replace(/\n?```$/gm, '');
-      
+
       const result = JSON.parse(cleanJson) as StoryUpdateResult;
       return result;
     }

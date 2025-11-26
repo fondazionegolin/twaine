@@ -21,6 +21,9 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   const [localContent, setLocalContent] = useState(node.content);
   const [localMediaPrompt, setLocalMediaPrompt] = useState(node.mediaPrompt || "");
   const [localMediaType, setLocalMediaType] = useState<'image' | 'video'>(node.mediaType || 'image');
+  const [localImageModel, setLocalImageModel] = useState<'flux-schnell' | 'flux-dev-gguf' | 'sdxl'>(node.imageModel || 'flux-schnell');
+  const [localImageWidth, setLocalImageWidth] = useState<number>(node.imageWidth || 512);
+  const [localImageHeight, setLocalImageHeight] = useState<number>(node.imageHeight || 512);
   const [localInteraction, setLocalInteraction] = useState(node.interactionDescription || "");
   const [localCode, setLocalCode] = useState(node.interactionCode || "");
   const [localTextGenerationPrompt, setLocalTextGenerationPrompt] = useState("");
@@ -42,6 +45,9 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     setLocalContent(node.content);
     setLocalMediaPrompt(node.mediaPrompt || "");
     setLocalMediaType(node.mediaType || 'image');
+    setLocalImageModel(node.imageModel || 'flux-schnell');
+    setLocalImageWidth(node.imageWidth || 512);
+    setLocalImageHeight(node.imageHeight || 512);
     setLocalInteraction(node.interactionDescription || "");
     setLocalCode(node.interactionCode || "");
     setCodeChatHistory(node.codeChatHistory || []);
@@ -63,6 +69,9 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         content: localContent,
         mediaPrompt: localMediaPrompt,
         mediaType: localMediaType,
+        imageModel: localImageModel,
+        imageWidth: localImageWidth,
+        imageHeight: localImageHeight,
         interactionDescription: localInteraction,
         interactionCode: localCode,
         codeChatHistory: codeChatHistory
@@ -97,8 +106,8 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     setGenState({ isGenerating: true, type: 'MEDIA', mediaType: localMediaType });
     setStatusMessage("Generating image...");
     try {
-      const uri = await GeminiService.generateNodeMedia(localMediaPrompt, localMediaType, (msg) => setStatusMessage(msg));
-      onUpdate({ ...node, mediaUri: uri, mediaPrompt: localMediaPrompt, mediaType: localMediaType });
+      const uri = await GeminiService.generateNodeMedia(localMediaPrompt, localMediaType, localImageModel, localImageWidth, localImageHeight, (msg) => setStatusMessage(msg));
+      onUpdate({ ...node, mediaUri: uri, mediaPrompt: localMediaPrompt, mediaType: localMediaType, imageModel: localImageModel, imageWidth: localImageWidth, imageHeight: localImageHeight });
       setStatusMessage("");
     } catch (e) {
       console.error(e);
@@ -115,7 +124,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     try {
       const code = await GeminiService.generateInteractionCode(localInteraction, worldSettings, currentStyle);
       setLocalCode(code);
-      
+
       // Add initial generation message to chat
       const aiMessage: ChatMessage = {
         id: `msg-${Date.now()}-ai`,
@@ -161,7 +170,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
       // Generate detailed feedback about changes
       const feedback = generateCodeChangeFeedback(oldCode, newCode, chatMessage.trim());
-      
+
       const aiMessage: ChatMessage = {
         id: `msg-${Date.now()}-ai`,
         role: 'assistant',
@@ -190,10 +199,10 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     const linesDiff = newLines - oldLines;
 
     let feedback = `✅ Code updated for: "${request}"\n\n`;
-    
+
     // Analyze changes
     const changes: string[] = [];
-    
+
     if (linesDiff > 0) {
       changes.push(`📝 Added ${linesDiff} new line${linesDiff > 1 ? 's' : ''}`);
     } else if (linesDiff < 0) {
@@ -306,7 +315,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
             <span className="text-xs font-semibold text-neutral-400 uppercase">AI Chat</span>
             <span className="text-[10px] text-neutral-500">{codeChatHistory.length} messages</span>
           </div>
-          
+
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-neutral-950">
             {codeChatHistory.length === 0 ? (
@@ -320,11 +329,10 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[90%] px-3 py-2 rounded-lg text-xs ${
-                      msg.role === 'user'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-neutral-800 text-neutral-200'
-                    }`}
+                    className={`max-w-[90%] px-3 py-2 rounded-lg text-xs ${msg.role === 'user'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-neutral-800 text-neutral-200'
+                      }`}
                   >
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   </div>
@@ -422,9 +430,8 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
             <div className="flex bg-neutral-800 rounded p-0.5 gap-0.5">
               <button
                 onClick={() => setLocalMediaType('image')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${
-                  localMediaType === 'image' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:bg-neutral-700'
-                }`}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${localMediaType === 'image' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:bg-neutral-700'
+                  }`}
               >
                 <ImageIcon size={14} /> Image
               </button>
@@ -438,6 +445,88 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               </button>
             </div>
 
+            {/* Model Selection (only for images) */}
+            {localMediaType === 'image' && (
+              <div className="space-y-1">
+                <label className="text-[9px] font-medium text-neutral-400">Model</label>
+                <select
+                  value={localImageModel}
+                  onChange={(e) => setLocalImageModel(e.target.value as 'flux-schnell' | 'flux-dev-gguf' | 'sdxl')}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-purple-500"
+                >
+                  <option value="flux-schnell">Flux Schnell (Fast)</option>
+                  <option value="flux-dev-gguf">Flux Dev GGUF (Quality)</option>
+                  <option value="sdxl">SDXL (Alternative)</option>
+                </select>
+
+                {/* Dimension Controls */}
+                <div className="space-y-1 mt-2">
+                  <label className="text-[9px] font-medium text-neutral-400">Dimensions</label>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        value={localImageWidth}
+                        onChange={(e) => setLocalImageWidth(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
+                        min="256"
+                        max="2048"
+                        step="64"
+                        className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-purple-500"
+                        placeholder="Width"
+                      />
+                    </div>
+                    <span className="text-neutral-500 text-xs flex items-center">×</span>
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        value={localImageHeight}
+                        onChange={(e) => setLocalImageHeight(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
+                        min="256"
+                        max="2048"
+                        step="64"
+                        className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-purple-500"
+                        placeholder="Height"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preset Sizes */}
+                  <div className="flex gap-1 flex-wrap">
+                    <button
+                      onClick={() => { setLocalImageWidth(512); setLocalImageHeight(512); }}
+                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
+                    >
+                      512²
+                    </button>
+                    <button
+                      onClick={() => { setLocalImageWidth(768); setLocalImageHeight(768); }}
+                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
+                    >
+                      768²
+                    </button>
+                    <button
+                      onClick={() => { setLocalImageWidth(1024); setLocalImageHeight(1024); }}
+                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
+                    >
+                      1024²
+                    </button>
+                    <button
+                      onClick={() => { setLocalImageWidth(1024); setLocalImageHeight(768); }}
+                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
+                    >
+                      4:3
+                    </button>
+                    <button
+                      onClick={() => { setLocalImageWidth(1280); setLocalImageHeight(720); }}
+                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
+                    >
+                      16:9
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Only show preview if generating or has media */}
             {isGeneratingMedia && (
               <div className="h-24 bg-neutral-800 rounded border border-neutral-700 flex items-center justify-center text-blue-400 animate-pulse text-xs">
@@ -445,13 +534,13 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                 <span>{statusMessage || 'Generating...'}</span>
               </div>
             )}
-            
+
             {!isGeneratingMedia && node.mediaUri && (
               <div className="relative group rounded overflow-hidden border border-neutral-700 h-32">
                 <img src={node.mediaUri} alt="Node visual" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <button 
-                    onClick={() => onUpdate({ ...node, mediaUri: undefined, mediaPrompt: "" })} 
+                  <button
+                    onClick={() => onUpdate({ ...node, mediaUri: undefined, mediaPrompt: "" })}
                     className="text-white text-xs bg-red-600 hover:bg-red-500 px-3 py-1 rounded"
                   >
                     Remove
