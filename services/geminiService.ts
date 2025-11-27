@@ -79,7 +79,20 @@ async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 5, in
 /**
  * Generates a full story skeleton (nodes and connections) from a master prompt.
  */
-export const generateStorySkeleton = async (prompt: string, settings: WorldSettings): Promise<StoryNode[]> => {
+export const generateStorySkeleton = async (
+  prompt: string,
+  settings: WorldSettings,
+  language: string = 'en'
+): Promise<StoryNode[]> => {
+  const languageNames: Record<string, string> = {
+    'it': 'Italian',
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German'
+  };
+  const langName = languageNames[language] || 'English';
+
   let systemInstruction = `
     You are an expert interactive fiction writer and game designer.
     Create a branching story skeleton based on the user's prompt.
@@ -88,6 +101,12 @@ export const generateStorySkeleton = async (prompt: string, settings: WorldSetti
     Position x and y should be spaced out (e.g., increments of 300).
     The IDs should be unique strings.
     Each node must include a 'mediaType' field, default to 'image'.
+    
+    CRITICAL LANGUAGE REQUIREMENT:
+    - The user's prompt is in ${langName}
+    - Generate ALL story content (titles, content) in ${langName}
+    - Maintain consistency in language throughout all nodes
+    - Use natural, native ${langName} expressions and idioms
     
     Game Mechanics requested:
   `;
@@ -160,8 +179,18 @@ export const generateNodeText = async (
   allNodes: StoryNode[],
   currentNodeId: string,
   userTextPrompt: string,
-  masterPrompt: string
+  masterPrompt: string,
+  language: string = 'en'
 ): Promise<string> => {
+  const languageNames: Record<string, string> = {
+    'it': 'Italian',
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German'
+  };
+  const langName = languageNames[language] || 'English';
+
   return retryOperation(async () => {
     const currentNode = allNodes.find(n => n.id === currentNodeId);
     if (!currentNode) {
@@ -193,6 +222,12 @@ export const generateNodeText = async (
       Keep the generated text concise, suitable for a single story passage(maximum 150 - 200 words).
       Strictly adhere to the overall story idea and the immediate context provided.
       Incorporate the user's specific prompt for this passage.
+      
+      CRITICAL LANGUAGE REQUIREMENT:
+      - The story is written in ${langName}
+      - Generate ALL content in ${langName}
+      - Use natural, native ${langName} expressions and style
+      - Maintain consistency with the existing story language
     `;
 
     const fullPrompt = `
@@ -240,6 +275,7 @@ export const generateNodeText = async (
 
 /**
  * Generates an image or video using the appropriate model.
+ * Supports img2img when a reference image is provided.
  */
 export const generateNodeMedia = async (
   mediaPrompt: string,
@@ -247,7 +283,8 @@ export const generateNodeMedia = async (
   model: 'flux-schnell' | 'flux-dev-gguf' | 'sdxl' = 'flux-schnell',
   width: number = 512,
   height: number = 512,
-  onStatusUpdate?: (msg: string) => void
+  onStatusUpdate?: (msg: string) => void,
+  referenceImage?: string // Optional reference image for img2img
 ): Promise<string> => {
   return retryOperation(async () => {
     if (mediaType === 'image') {
@@ -261,21 +298,41 @@ export const generateNodeMedia = async (
         throw new Error("VITE_FLUX_API_KEY not configured. Please add it to .env.local");
       }
 
-      if (onStatusUpdate) onStatusUpdate(`Generating image with ${model}...`);
+      // Determine if we're using img2img or text2img
+      const isImg2Img = !!referenceImage;
+      const endpoint = isImg2Img ? '/img2img' : '/generate';
 
-      const response = await fetch(`${FLUX_API_URL}/generate`, {
+      if (onStatusUpdate) {
+        const mode = isImg2Img ? 'img2img' : 'text2img';
+        onStatusUpdate(`Generating image with ${model} (${mode})...`);
+      }
+
+      const requestBody: any = {
+        prompt: mediaPrompt,
+        model_id: model,
+        steps: 3,
+        width: width,
+        height: height
+      };
+
+      // Add reference image for img2img
+      if (isImg2Img && referenceImage) {
+        // Extract base64 data if it's a data URL
+        const base64Data = referenceImage.includes('base64,')
+          ? referenceImage.split('base64,')[1]
+          : referenceImage;
+
+        requestBody.image = base64Data;
+        requestBody.strength = 0.7; // How much to modify the original image (0.0-1.0)
+      }
+
+      const response = await fetch(`${FLUX_API_URL}${endpoint}`, {
         method: "POST",
         headers: {
           "X-API-Key": FLUX_API_KEY,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          prompt: mediaPrompt,
-          model_id: model,
-          steps: 3,  // Reduced from 4 for faster generation
-          width: width,
-          height: height
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -457,6 +514,97 @@ export const generateStoryStyle = async (stylePrompt: string): Promise<StoryStyl
         return JSON.parse(jsonMatch[0]) as StoryStyle;
       }
       throw new Error("Failed to parse JSON from Claude response");
+    }
+  });
+};
+
+/**
+ * Generates a detailed English scene description for image generation.
+ * Maintains character consistency and visual coherence across the story.
+ */
+export const generateImageSceneDescription = async (
+  nodeContent: string,
+  nodeTitle: string,
+  masterPrompt: string,
+  allNodes: StoryNode[],
+  currentNodeId: string
+): Promise<string> => {
+  return retryOperation(async () => {
+    // Collect context from previous nodes
+    const previousScenes: string[] = [];
+    allNodes.forEach(node => {
+      if (node.imageSceneDescription && node.id !== currentNodeId) {
+        previousScenes.push(`"${node.title}": ${node.imageSceneDescription}`);
+      }
+    });
+
+    const systemInstruction = `
+      You are an expert at creating detailed image prompts for AI image generation.
+      
+      CRITICAL REQUIREMENTS:
+      1. Generate the scene description ALWAYS in ENGLISH, regardless of the story language
+      2. Maintain character consistency across the story (same appearance, clothing, features)
+      3. Include specific visual details (character appearance, setting, lighting, mood)
+      4. Keep descriptions concise but vivid (maximum 100 words)
+      5. Focus on visual elements that can be rendered in an image
+      6. Use cinematic and artistic terminology
+      
+      CONTEXT AWARENESS:
+      - Track recurring characters and maintain their consistent appearance
+      - Reference previous scenes to ensure visual continuity
+      - Maintain consistent art style throughout the story
+      - Include atmospheric details (lighting, weather, time of day)
+      
+      FORMAT:
+      Return a single paragraph describing the visual scene in English.
+      Include: characters (with consistent physical description), setting, lighting, mood, key objects, composition.
+      
+      STYLE KEYWORDS:
+      Use descriptive terms like: "cinematic lighting", "detailed", "atmospheric", "high quality",
+      "photorealistic" or "illustrated" depending on the story genre.
+    `;
+
+    const contextPrompt = `
+      Master Story Concept: "${masterPrompt}"
+      
+      ${previousScenes.length > 0 ? `Previous scenes for visual consistency:\n${previousScenes.slice(-3).join('\n')}\n` : 'This is the first scene.'}
+      
+      Current Node: "${nodeTitle}"
+      Story Content: "${nodeContent}"
+      
+      Generate a detailed English image prompt for this scene.
+      Maintain visual consistency with previous scenes, especially character appearances.
+    `;
+
+    try {
+      const ai = getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: MODEL_TEXT,
+        contents: contextPrompt,
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+          maxOutputTokens: 150
+        }
+      });
+
+      return response.text?.trim() || "";
+    } catch (error) {
+      console.warn("Gemini failed, falling back to Claude...", error);
+
+      // Fallback to Claude
+      const anthropic = getAnthropicClient();
+      const msg = await anthropic.messages.create({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 150,
+        system: systemInstruction,
+        messages: [
+          { role: "user", content: contextPrompt }
+        ]
+      });
+
+      const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+      return text.trim();
     }
   });
 };

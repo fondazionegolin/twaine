@@ -14,6 +14,7 @@ import { StoryNode, ViewMode, WorldSettings, SavedStory, StoryStyle, ChatMessage
 import * as GeminiService from './services/geminiService';
 import * as DatabaseService from './services/databaseService';
 import { getGoogleFontsUrl, getAllFonts } from './utils/stylePresets';
+import { detectLanguage } from './utils/languageDetection';
 import { Play, PenTool, Sparkles, Loader2, ArrowRight, BookOpen, PlusCircle, Trash2, Home, Save, Coins, Sword, Backpack, Palette, X, Code, History, LogOut, Settings } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { css } from '@codemirror/lang-css';
@@ -77,6 +78,9 @@ const AppContent: React.FC = () => {
     const [isGeneratingStyle, setIsGeneratingStyle] = useState(false);
     const [showStylePrompt, setShowStylePrompt] = useState(false);
     const [stylePrompt, setStylePrompt] = useState("");
+
+    // Language State
+    const [storyLanguage, setStoryLanguage] = useState<string>('en');
 
     // Player State
     const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
@@ -150,6 +154,14 @@ const AppContent: React.FC = () => {
             ));
         }
     }, [storyName, currentStoryId]);
+
+    // Detect language when prompt changes
+    useEffect(() => {
+        if (prompt.trim()) {
+            const detected = detectLanguage(prompt);
+            setStoryLanguage(detected);
+        }
+    }, [prompt]);
 
     // --- Version Control Functions ---
 
@@ -265,7 +277,7 @@ const AppContent: React.FC = () => {
         if (!prompt.trim()) return;
         setIsGeneratingSkeleton(true);
         try {
-            const skeleton = await GeminiService.generateStorySkeleton(prompt, worldSettings);
+            const skeleton = await GeminiService.generateStorySkeleton(prompt, worldSettings, storyLanguage);
             setNodes(skeleton);
             setSelectedNodeId(null);
             if (!currentStoryId) { // Assign a new ID if it's a new story
@@ -996,12 +1008,13 @@ const AppContent: React.FC = () => {
                                 onPlayFromNode={startPlayerFromNode}
                             />
                         </div>
-                        {selectedNodeId && (
+                        {selectedNode && (
                             <NodeInspector
-                                node={nodes.find(n => n.id === selectedNodeId)!}
+                                node={selectedNode}
                                 worldSettings={worldSettings}
                                 storyNodes={nodes} // Pass all nodes for contextual text generation
                                 masterPrompt={prompt} // Pass master prompt for contextual text generation
+                                storyLanguage={storyLanguage}
                                 currentStyle={currentStyle}
                                 onUpdate={handleNodeUpdate}
                                 onClose={() => setSelectedNodeId(null)}

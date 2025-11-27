@@ -21,6 +21,8 @@ export interface StoryNode {
   imageModel?: 'flux-schnell' | 'flux-dev-gguf' | 'sdxl'; // Image generation model
   imageWidth?: number; // Image width (default 512)
   imageHeight?: number; // Image height (default 512)
+  uploadedImage?: boolean; // Flag to indicate if image was uploaded (not generated)
+  imageSceneDescription?: string; // English description of the scene for image generation
   interactionDescription?: string;
   interactionCode?: string; // JS Body
   codeChatHistory?: ChatMessage[]; // Chat history for iterative code editing
@@ -81,6 +83,11 @@ export interface StoryStyle {
   pageShadow?: boolean;
   pageEdgeColor?: string;
   ornamentStyle?: 'none' | 'simple' | 'elegant' | 'medieval' | 'art-nouveau';
+  // New: Decorative elements
+  borderStyle?: 'none' | 'simple' | 'ornate' | 'medieval' | 'modern';
+  cornerOrnaments?: boolean;
+  headerDecoration?: 'none' | 'simple' | 'flourish' | 'geometric';
+  dividerStyle?: 'none' | 'line' | 'dots' | 'ornamental';
 }
 
 export interface StoryVersion {

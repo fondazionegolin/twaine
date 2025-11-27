@@ -10,12 +10,13 @@ interface NodeInspectorProps {
   worldSettings: WorldSettings;
   storyNodes: StoryNode[];
   masterPrompt: string;
+  storyLanguage?: string;
   currentStyle?: StoryStyle;
   onUpdate: (updatedNode: StoryNode) => void;
   onClose: () => void;
 }
 
-const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, storyNodes, masterPrompt, currentStyle, onUpdate, onClose }) => {
+const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, storyNodes, masterPrompt, storyLanguage = 'en', currentStyle, onUpdate, onClose }) => {
   const [genState, setGenState] = useState<GenerationState>({ isGenerating: false });
   const [localTitle, setLocalTitle] = useState(node.title);
   const [localContent, setLocalContent] = useState(node.content);
@@ -27,6 +28,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   const [localInteraction, setLocalInteraction] = useState(node.interactionDescription || "");
   const [localCode, setLocalCode] = useState(node.interactionCode || "");
   const [localTextGenerationPrompt, setLocalTextGenerationPrompt] = useState("");
+  const [localImageSceneDesc, setLocalImageSceneDesc] = useState(node.imageSceneDescription || "");
   const [statusMessage, setStatusMessage] = useState("");
 
   // Chat state for code iteration
@@ -50,6 +52,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     setLocalImageHeight(node.imageHeight || 512);
     setLocalInteraction(node.interactionDescription || "");
     setLocalCode(node.interactionCode || "");
+    setLocalImageSceneDesc(node.imageSceneDescription || "");
     setCodeChatHistory(node.codeChatHistory || []);
     setLocalTextGenerationPrompt("");
     setStatusMessage("");
@@ -72,6 +75,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         imageModel: localImageModel,
         imageWidth: localImageWidth,
         imageHeight: localImageHeight,
+        imageSceneDescription: localImageSceneDesc,
         interactionDescription: localInteraction,
         interactionCode: localCode,
         codeChatHistory: codeChatHistory
@@ -79,14 +83,14 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [localTitle, localContent, localMediaPrompt, localMediaType, localInteraction, localCode, codeChatHistory]);
+  }, [localTitle, localContent, localMediaPrompt, localMediaType, localImageSceneDesc, localInteraction, localCode, codeChatHistory]);
 
   const generateText = async () => {
     if (!localTextGenerationPrompt.trim()) return alert("Please enter a brief prompt for text generation.");
     setGenState({ isGenerating: true, type: 'TEXT' });
     setStatusMessage("Generating text...");
     try {
-      const newText = await GeminiService.generateNodeText(storyNodes, node.id, localTextGenerationPrompt, masterPrompt);
+      const newText = await GeminiService.generateNodeText(storyNodes, node.id, localTextGenerationPrompt, masterPrompt, storyLanguage);
       setLocalContent(newText);
       setStatusMessage("");
     } catch (e) {
@@ -102,16 +106,97 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
       alert("Video generation is not yet implemented.");
       return;
     }
-    if (!localMediaPrompt) return alert("Please enter an image prompt first.");
+
+    // Use scene description if available, otherwise use media prompt
+    const promptToUse = localImageSceneDesc || localMediaPrompt;
+    if (!promptToUse) return alert("Please enter an image prompt or generate a scene description first.");
+
     setGenState({ isGenerating: true, type: 'MEDIA', mediaType: localMediaType });
     setStatusMessage("Generating image...");
     try {
-      const uri = await GeminiService.generateNodeMedia(localMediaPrompt, localMediaType, localImageModel, localImageWidth, localImageHeight, (msg) => setStatusMessage(msg));
-      onUpdate({ ...node, mediaUri: uri, mediaPrompt: localMediaPrompt, mediaType: localMediaType, imageModel: localImageModel, imageWidth: localImageWidth, imageHeight: localImageHeight });
+      // Pass reference image if this is an uploaded image
+      const referenceImage = node.uploadedImage ? node.mediaUri : undefined;
+
+      const uri = await GeminiService.generateNodeMedia(
+        promptToUse,
+        localMediaType,
+        localImageModel,
+        localImageWidth,
+        localImageHeight,
+        (msg) => setStatusMessage(msg),
+        referenceImage
+      );
+
+      onUpdate({
+        ...node,
+        mediaUri: uri,
+        mediaPrompt: localMediaPrompt,
+        imageSceneDescription: localImageSceneDesc,
+        mediaType: localMediaType,
+        imageModel: localImageModel,
+        imageWidth: localImageWidth,
+        imageHeight: localImageHeight,
+        uploadedImage: false // Mark as generated, not uploaded
+      });
       setStatusMessage("");
     } catch (e) {
       console.error(e);
       alert("Failed to generate image");
+      setStatusMessage("Failed.");
+    }
+    setGenState({ isGenerating: false });
+  };
+
+  // Handle image upload
+  const handleUploadImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image file is too large. Maximum size is 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      onUpdate({
+        ...node,
+        mediaUri: base64,
+        uploadedImage: true // Mark as uploaded
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle image download
+  const handleDownloadImage = () => {
+    if (!node.mediaUri) return;
+
+    const link = document.createElement('a');
+    link.href = node.mediaUri;
+    link.download = `${node.title.replace(/\s+/g, '_')}_image.png`;
+    link.click();
+  };
+
+  // Generate scene description
+  const generateSceneDescription = async () => {
+    setGenState({ isGenerating: true, type: 'TEXT' });
+    setStatusMessage("Generating scene description...");
+    try {
+      const desc = await GeminiService.generateImageSceneDescription(
+        localContent,
+        localTitle,
+        masterPrompt,
+        storyNodes,
+        node.id
+      );
+      setLocalImageSceneDesc(desc);
+      setStatusMessage("");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate scene description");
       setStatusMessage("Failed.");
     }
     setGenState({ isGenerating: false });
@@ -242,6 +327,9 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
   const isGeneratingMedia = genState.isGenerating && genState.type === 'MEDIA';
 
+  // Show code panel only when there's code
+  const showCodePanel = localCode.trim().length > 0;
+
   // Resize handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsResizing(true);
@@ -278,97 +366,99 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         className="w-1 bg-neutral-700 hover:bg-blue-500 cursor-ew-resize transition-colors flex-shrink-0"
       />
 
-      {/* LEFT COLUMN - Code Editor & Chat */}
-      <div className="w-[360px] flex-shrink-0 flex flex-col border-r border-neutral-700 bg-neutral-950">
-        {/* Code Header */}
-        <div className="p-3 border-b border-neutral-700 bg-neutral-900">
-          <div className="flex items-center gap-2">
-            <Code2 size={16} className="text-indigo-400" />
-            <span className="text-sm font-semibold text-neutral-200">JavaScript Logic</span>
-          </div>
-        </div>
-
-        {/* Code Editor */}
-        <div className="flex-1 overflow-hidden min-h-0">
-          <CodeMirror
-            value={localCode}
-            onChange={(value) => setLocalCode(value)}
-            extensions={[javascript()]}
-            theme="dark"
-            height="100%"
-            className="h-full text-xs"
-            basicSetup={{
-              lineNumbers: true,
-              highlightActiveLineGutter: true,
-              foldGutter: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              autocompletion: true,
-              highlightActiveLine: true
-            }}
-          />
-        </div>
-
-        {/* Chat Box - Fixed at bottom */}
-        <div className="h-64 flex-shrink-0 border-t border-neutral-700 flex flex-col bg-neutral-900">
-          <div className="px-3 py-2 border-b border-neutral-800 flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-400 uppercase">AI Chat</span>
-            <span className="text-[10px] text-neutral-500">{codeChatHistory.length} messages</span>
+      {/* LEFT COLUMN - Code Editor & Chat - CONDITIONAL */}
+      {showCodePanel && (
+        <div className="w-[360px] flex-shrink-0 flex flex-col border-r border-neutral-700 bg-neutral-950 animate-in slide-in-from-left duration-300">
+          {/* Code Header */}
+          <div className="p-3 border-b border-neutral-700 bg-neutral-900">
+            <div className="flex items-center gap-2">
+              <Code2 size={16} className="text-indigo-400" />
+              <span className="text-sm font-semibold text-neutral-200">JavaScript Logic</span>
+            </div>
           </div>
 
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-neutral-950">
-            {codeChatHistory.length === 0 ? (
-              <p className="text-xs text-neutral-500 text-center py-4">
-                Ask AI to modify the code...
-              </p>
-            ) : (
-              codeChatHistory.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+          {/* Code Editor */}
+          <div className="flex-1 overflow-hidden min-h-0">
+            <CodeMirror
+              value={localCode}
+              onChange={(value) => setLocalCode(value)}
+              extensions={[javascript()]}
+              theme="dark"
+              height="100%"
+              className="h-full text-xs"
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLineGutter: true,
+                foldGutter: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                highlightActiveLine: true
+              }}
+            />
+          </div>
+
+          {/* Chat Box - Fixed at bottom */}
+          <div className="h-64 flex-shrink-0 border-t border-neutral-700 flex flex-col bg-neutral-900">
+            <div className="px-3 py-2 border-b border-neutral-800 flex items-center justify-between">
+              <span className="text-xs font-semibold text-neutral-400 uppercase">AI Chat</span>
+              <span className="text-[10px] text-neutral-500">{codeChatHistory.length} messages</span>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-neutral-950">
+              {codeChatHistory.length === 0 ? (
+                <p className="text-xs text-neutral-500 text-center py-4">
+                  Ask AI to modify the code...
+                </p>
+              ) : (
+                codeChatHistory.map((msg) => (
                   <div
-                    className={`max-w-[90%] px-3 py-2 rounded-lg text-xs ${msg.role === 'user'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-neutral-800 text-neutral-200'
-                      }`}
+                    key={msg.id}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    <div
+                      className={`max-w-[90%] px-3 py-2 rounded-lg text-xs ${msg.role === 'user'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-neutral-800 text-neutral-200'
+                        }`}
+                    >
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
-            <div ref={chatEndRef} />
-          </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
 
-          {/* Chat Input */}
-          <div className="p-2 border-t border-neutral-800">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChatMessage()}
-                placeholder="e.g., 'add a score counter'"
-                disabled={isChatProcessing}
-                className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-indigo-500 disabled:opacity-50"
-              />
-              <button
-                onClick={handleSendChatMessage}
-                disabled={!chatMessage.trim() || isChatProcessing}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isChatProcessing ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Send size={14} />
-                )}
-              </button>
+            {/* Chat Input */}
+            <div className="p-2 border-t border-neutral-800">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChatMessage()}
+                  placeholder="e.g., 'add a score counter'"
+                  disabled={isChatProcessing}
+                  className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-indigo-500 disabled:opacity-50"
+                />
+                <button
+                  onClick={handleSendChatMessage}
+                  disabled={!chatMessage.trim() || isChatProcessing}
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isChatProcessing ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Send size={14} />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* RIGHT COLUMN - Node Inspector */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -527,7 +617,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               </div>
             )}
 
-            {/* Only show preview if generating or has media */}
+            {/* Image Preview with Upload/Download */}
             {isGeneratingMedia && (
               <div className="h-24 bg-neutral-800 rounded border border-neutral-700 flex items-center justify-center text-blue-400 animate-pulse text-xs">
                 <Loader2 className="animate-spin mr-2" size={16} />
@@ -538,23 +628,62 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
             {!isGeneratingMedia && node.mediaUri && (
               <div className="relative group rounded overflow-hidden border border-neutral-700 h-32">
                 <img src={node.mediaUri} alt="Node visual" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
-                    onClick={() => onUpdate({ ...node, mediaUri: undefined, mediaPrompt: "" })}
+                    onClick={handleDownloadImage}
+                    className="text-white text-xs bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded flex items-center gap-1"
+                    title="Download image"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download
+                  </button>
+                  <button
+                    onClick={() => onUpdate({ ...node, mediaUri: undefined, mediaPrompt: "", uploadedImage: false })}
                     className="text-white text-xs bg-red-600 hover:bg-red-500 px-3 py-1 rounded"
                   >
                     Remove
                   </button>
                 </div>
+                {/* Indicator for uploaded vs generated */}
+                {node.uploadedImage && (
+                  <div className="absolute top-1 right-1 bg-green-600 text-white text-[9px] px-2 py-0.5 rounded">
+                    Uploaded
+                  </div>
+                )}
               </div>
             )}
 
+            {/* Scene Description Section */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[9px] font-medium text-neutral-400">Scene Description (English)</label>
+                <button
+                  onClick={generateSceneDescription}
+                  disabled={genState.isGenerating}
+                  className="text-[9px] text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                  title="Generate AI scene description"
+                >
+                  ✨ Generate
+                </button>
+              </div>
+              <textarea
+                value={localImageSceneDesc}
+                onChange={(e) => setLocalImageSceneDesc(e.target.value)}
+                rows={3}
+                placeholder="Detailed English description for image generation (e.g., 'A medieval knight in shining armor...')"
+                className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-300 outline-none resize-none focus:border-purple-500"
+              />
+            </div>
+
+            {/* Image Prompt (fallback) */}
             <div className="flex gap-2">
               <input
                 type="text"
                 value={localMediaPrompt}
                 onChange={(e) => setLocalMediaPrompt(e.target.value)}
-                placeholder="Describe the image scene..."
+                placeholder="Or enter a simple image prompt..."
                 className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white outline-none"
               />
               <button
@@ -565,6 +694,26 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               >
                 {isGeneratingMedia ? <Loader2 className="animate-spin" size={14} /> : <ImageIcon size={14} />}
               </button>
+            </div>
+
+            {/* Upload Button */}
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadImage}
+                className="hidden"
+                id="image-upload"
+              />
+              <label
+                htmlFor="image-upload"
+                className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 py-2 px-3 rounded text-xs cursor-pointer transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Upload Image from PC
+              </label>
             </div>
           </div>
 
