@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StoryNode, GenerationState, WorldSettings, StoryStyle, ChatMessage, VNSprite, VNAudio } from '../types';
+import { StoryNode, GenerationState, WorldSettings, StoryStyle, ChatMessage, VNSprite, VNAudio, CharacterReference } from '../types';
 import { Wand2, Image as ImageIcon, Terminal, Loader2, X, Film, Send, Code2, User, Music, Trash2, Plus, Volume2, ChevronDown, ChevronRight, Type, Gamepad2, Link, Upload, Sparkles } from 'lucide-react';
 import * as GeminiService from '../services/geminiService';
 import CodeMirror from '@uiw/react-codemirror';
@@ -12,11 +12,13 @@ interface NodeInspectorProps {
   masterPrompt: string;
   storyLanguage?: string;
   currentStyle?: StoryStyle;
+  characters?: CharacterReference[];
+  onCharactersChange?: (characters: CharacterReference[]) => void;
   onUpdate: (updatedNode: StoryNode) => void;
   onClose: () => void;
 }
 
-const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, storyNodes, masterPrompt, storyLanguage = 'en', currentStyle, onUpdate, onClose }) => {
+const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, storyNodes, masterPrompt, storyLanguage = 'en', currentStyle, characters = [], onCharactersChange, onUpdate, onClose }) => {
   // Check if we're in Visual Novel mode
   const isVNMode = currentStyle?.layoutMode === 'visual-novel';
   
@@ -63,6 +65,12 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   // Sprite generation state
   const [generatingSpriteIndex, setGeneratingSpriteIndex] = useState<number | null>(null);
 
+  // Character reference state
+  const [localCharacterId, setLocalCharacterId] = useState<string | undefined>(node.characterId);
+  const [showCharacterManager, setShowCharacterManager] = useState(false);
+  const [newCharacterName, setNewCharacterName] = useState("");
+  const [newCharacterDesc, setNewCharacterDesc] = useState("");
+
   // Resizable panel state
   const [panelWidth, setPanelWidth] = useState(720);
   const [isResizing, setIsResizing] = useState(false);
@@ -89,6 +97,8 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     setLocalVnAudio(node.vnAudio || []);
     setLocalVnSpeaker(node.vnSpeaker || "");
     setLocalVnTextEffect(node.vnTextEffect || 'typewriter');
+    // Character reference
+    setLocalCharacterId(node.characterId);
   }, [node]);
 
   // Auto-scroll chat
@@ -118,12 +128,14 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         vnSprites: localVnSprites.length > 0 ? localVnSprites : undefined,
         vnAudio: localVnAudio.length > 0 ? localVnAudio : undefined,
         vnSpeaker: localVnSpeaker || undefined,
-        vnTextEffect: localVnTextEffect
+        vnTextEffect: localVnTextEffect,
+        // Character reference
+        characterId: localCharacterId
       });
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [localTitle, localContent, localMediaPrompt, localMediaType, localImageSceneDesc, localInteraction, localCode, codeChatHistory, localVnBackground, localVnSprites, localVnAudio, localVnSpeaker, localVnTextEffect]);
+  }, [localTitle, localContent, localMediaPrompt, localMediaType, localImageSceneDesc, localInteraction, localCode, codeChatHistory, localVnBackground, localVnSprites, localVnAudio, localVnSpeaker, localVnTextEffect, localCharacterId]);
 
   const generateText = async () => {
     if (!localTextGenerationPrompt.trim()) return alert("Please enter a brief prompt for text generation.");
@@ -152,15 +164,31 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     if (!promptToUse) return alert("Please enter an image prompt or generate a scene description first.");
 
     setGenState({ isGenerating: true, type: 'MEDIA', mediaType: localMediaType });
-    setStatusMessage("Generating image...");
-    try {
-      // Pass reference image if this is an uploaded image
-      const referenceImage = node.uploadedImage ? node.mediaUri : undefined;
+    
+    // Check if we have a character reference for img2img
+    const selectedCharacter = localCharacterId ? characters.find(c => c.id === localCharacterId) : undefined;
+    
+    let referenceImage: string | undefined;
+    let modelToUse = localImageModel;
+    
+    if (selectedCharacter?.referenceImage) {
+      // Use character reference for img2img consistency
+      referenceImage = selectedCharacter.referenceImage;
+      modelToUse = selectedCharacter.model; // Use the character's model for consistency
+      setStatusMessage(`Generating with ${selectedCharacter.name} reference...`);
+    } else if (node.uploadedImage && node.mediaUri) {
+      // Fallback to uploaded image if available
+      referenceImage = node.mediaUri;
+      setStatusMessage("Generating image...");
+    } else {
+      setStatusMessage("Generating image...");
+    }
 
+    try {
       const uri = await GeminiService.generateNodeMedia(
         promptToUse,
         localMediaType,
-        localImageModel,
+        modelToUse,
         localImageWidth,
         localImageHeight,
         localImageSteps,
@@ -174,10 +202,11 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         mediaPrompt: localMediaPrompt,
         imageSceneDescription: localImageSceneDesc,
         mediaType: localMediaType,
-        imageModel: localImageModel,
+        imageModel: modelToUse,
         imageWidth: localImageWidth,
         imageHeight: localImageHeight,
         imageSteps: localImageSteps,
+        characterId: localCharacterId,
         uploadedImage: false // Mark as generated, not uploaded
       });
       setStatusMessage("");
@@ -768,6 +797,135 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Character Reference for Consistency */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-neutral-500 flex items-center gap-1.5">
+                  <User size={12} className="text-indigo-400" />
+                  Character Reference
+                </label>
+                <button
+                  onClick={() => setShowCharacterManager(!showCharacterManager)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300"
+                >
+                  {showCharacterManager ? 'Hide' : 'Manage'}
+                </button>
+              </div>
+              
+              {/* Character Selector */}
+              <select
+                value={localCharacterId || ''}
+                onChange={(e) => setLocalCharacterId(e.target.value || undefined)}
+                className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
+              >
+                <option value="">No character (text-to-image)</option>
+                {characters.map(char => (
+                  <option key={char.id} value={char.id}>
+                    {char.name} ({char.model})
+                  </option>
+                ))}
+              </select>
+
+              {/* Selected Character Preview */}
+              {localCharacterId && characters.find(c => c.id === localCharacterId) && (
+                <div className="flex gap-2 items-center bg-indigo-900/20 border border-indigo-700/30 rounded-lg p-2">
+                  <img 
+                    src={characters.find(c => c.id === localCharacterId)?.referenceImage} 
+                    alt="Character ref" 
+                    className="w-12 h-12 object-cover rounded-lg"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-white truncate">
+                      {characters.find(c => c.id === localCharacterId)?.name}
+                    </div>
+                    <div className="text-[10px] text-neutral-400">
+                      Using img2img for consistency
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Character Manager */}
+              {showCharacterManager && (
+                <div className="space-y-3 bg-neutral-800/30 border border-neutral-700 rounded-lg p-3">
+                  <div className="text-xs font-medium text-neutral-300">Create New Character</div>
+                  
+                  {/* New Character Form */}
+                  <input
+                    type="text"
+                    value={newCharacterName}
+                    onChange={(e) => setNewCharacterName(e.target.value)}
+                    placeholder="Character name..."
+                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                  />
+                  <textarea
+                    value={newCharacterDesc}
+                    onChange={(e) => setNewCharacterDesc(e.target.value)}
+                    placeholder="Character description (for prompt enhancement)..."
+                    rows={2}
+                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none resize-none"
+                  />
+                  
+                  <div className="text-[10px] text-neutral-500">
+                    To create a character, first generate or upload an image above, then click "Save as Character"
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      if (!newCharacterName.trim()) return alert("Enter a character name");
+                      if (!node.mediaUri) return alert("Generate or upload an image first");
+                      
+                      const newChar: CharacterReference = {
+                        id: `char_${Date.now()}`,
+                        name: newCharacterName.trim(),
+                        description: newCharacterDesc.trim(),
+                        referenceImage: node.mediaUri,
+                        model: localImageModel,
+                        strength: 0.5
+                      };
+                      
+                      onCharactersChange?.([...characters, newChar]);
+                      setLocalCharacterId(newChar.id);
+                      setNewCharacterName("");
+                      setNewCharacterDesc("");
+                      setShowCharacterManager(false);
+                    }}
+                    disabled={!node.mediaUri || !newCharacterName.trim()}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white text-xs font-medium py-2 rounded-lg transition-colors"
+                  >
+                    Save Current Image as Character
+                  </button>
+
+                  {/* Existing Characters */}
+                  {characters.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-neutral-700">
+                      <div className="text-xs font-medium text-neutral-400">Saved Characters</div>
+                      {characters.map(char => (
+                        <div key={char.id} className="flex gap-2 items-center bg-neutral-800/50 rounded-lg p-2">
+                          <img src={char.referenceImage} alt={char.name} className="w-10 h-10 object-cover rounded" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-white truncate">{char.name}</div>
+                            <div className="text-[10px] text-neutral-500">{char.model}</div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete character "${char.name}"?`)) {
+                                onCharactersChange?.(characters.filter(c => c.id !== char.id));
+                                if (localCharacterId === char.id) setLocalCharacterId(undefined);
+                              }
+                            }}
+                            className="p-1 text-red-400 hover:text-red-300"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Upload / URL */}

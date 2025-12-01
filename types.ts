@@ -44,6 +44,7 @@ export interface StoryNode {
   imageSteps?: number; // Number of generation steps (default varies by model)
   uploadedImage?: boolean; // Flag to indicate if image was uploaded (not generated)
   imageSceneDescription?: string; // English description of the scene for image generation
+  characterId?: string; // Reference to a character for consistent img2img generation
   interactionDescription?: string;
   interactionCode?: string; // JS Body
   codeChatHistory?: ChatMessage[]; // Chat history for iterative code editing
@@ -125,6 +126,16 @@ export interface StoryVersion {
   masterPrompt: string;
 }
 
+// Character reference for consistent character generation across nodes
+export interface CharacterReference {
+  id: string;
+  name: string;
+  description: string; // Text description of the character
+  referenceImage: string; // Base64 or URL of reference image
+  model: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl'; // Model used for this character
+  strength?: number; // img2img strength (0.3-0.8, default 0.5)
+}
+
 export interface SavedStory {
   id: string;
   userId: string; // Owner of the story
@@ -133,6 +144,7 @@ export interface SavedStory {
   nodes: StoryNode[];
   worldSettings: WorldSettings;
   style?: StoryStyle; // Optional style for the story
+  characters?: CharacterReference[]; // Character references for consistent generation
   createdAt: number;
   updatedAt?: number;
   versions?: StoryVersion[]; // Version history

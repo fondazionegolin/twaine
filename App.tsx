@@ -11,7 +11,7 @@ import BookLayout from './components/BookLayout';
 import StyleEditor from './components/StyleEditor';
 import VisualNovelPlayer from './components/VisualNovelPlayer';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { StoryNode, ViewMode, WorldSettings, SavedStory, StoryStyle, ChatMessage, StoryVersion } from './types';
+import { StoryNode, ViewMode, WorldSettings, SavedStory, StoryStyle, ChatMessage, StoryVersion, CharacterReference } from './types';
 import * as GeminiService from './services/geminiService';
 import * as DatabaseService from './services/databaseService';
 import { getGoogleFontsUrl, getAllFonts } from './utils/stylePresets';
@@ -80,6 +80,9 @@ const AppContent: React.FC = () => {
     const [isGeneratingStyle, setIsGeneratingStyle] = useState(false);
     const [showStylePrompt, setShowStylePrompt] = useState(false);
     const [stylePrompt, setStylePrompt] = useState("");
+
+    // Character References for consistent image generation
+    const [characters, setCharacters] = useState<CharacterReference[]>([]);
 
     // Language State
     const [storyLanguage, setStoryLanguage] = useState<string>('en');
@@ -568,7 +571,8 @@ const AppContent: React.FC = () => {
             nodes: nodes,
             worldSettings: worldSettings,
             createdAt: currentStoryId ? (savedStories.find(s => s.id === currentStoryId)?.createdAt || Date.now()) : Date.now(),
-            style: currentStyle
+            style: currentStyle,
+            characters: characters // Save character references
         };
 
         setSavedStories(prev => {
@@ -591,6 +595,7 @@ const AppContent: React.FC = () => {
         setPrompt(story.masterPrompt);
         setWorldSettings(story.worldSettings);
         setCurrentStyle(story.style); // Load the style
+        setCharacters(story.characters || []); // Load character references
         setCurrentStoryId(story.id);
         setStoryName(story.name); // Load story name
         setSelectedNodeId(null);
@@ -620,6 +625,7 @@ const AppContent: React.FC = () => {
         setPrompt("");
         setWorldSettings({ useInventory: false, useEconomy: false, useCombat: false });
         setCurrentStyle(undefined); // Reset style
+        setCharacters([]); // Reset character references
         setCurrentStoryId(null);
         setSelectedNodeId(null);
         setStoryVersions([]); // Reset version history
@@ -1084,6 +1090,8 @@ const AppContent: React.FC = () => {
                                         masterPrompt={prompt}
                                         storyLanguage={storyLanguage}
                                         currentStyle={currentStyle}
+                                        characters={characters}
+                                        onCharactersChange={setCharacters}
                                         onUpdate={handleNodeUpdate}
                                         onClose={() => setSelectedNodeId(null)}
                                     />
