@@ -340,8 +340,29 @@ export const generateNodeText = async (
 };
 
 /**
+ * Get optimal steps for each model
+ */
+const getOptimalSteps = (model: string): number => {
+  switch (model) {
+    case 'sd-turbo':
+      return 1; // SD Turbo is designed for 1-4 steps
+    case 'flux-schnell':
+      return 4; // Flux Schnell works well with 4 steps
+    case 'flux-dev':
+      return 25; // Flux Dev needs more steps for quality
+    case 'flux-krea-dev':
+      return 25; // Similar to Flux Dev
+    case 'sdxl':
+      return 30; // SDXL benefits from more steps
+    default:
+      return 20;
+  }
+};
+
+/**
  * Generates an image or video using the appropriate model.
  * Supports img2img when a reference image is provided.
+ * Steps are automatically optimized based on the model.
  */
 export const generateNodeMedia = async (
   mediaPrompt: string,
@@ -349,7 +370,7 @@ export const generateNodeMedia = async (
   model: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl' = 'sd-turbo',
   width: number = 512,
   height: number = 512,
-  steps: number = 1,
+  _steps: number = 1, // Ignored - steps are now auto-optimized
   onStatusUpdate?: (msg: string) => void,
   referenceImage?: string // Optional reference image for img2img
 ): Promise<string> => {
@@ -368,16 +389,19 @@ export const generateNodeMedia = async (
       // Determine if we're using img2img or text2img
       const isImg2Img = !!referenceImage;
       const endpoint = isImg2Img ? '/api/v1/generate/img2img' : '/api/v1/generate/text2img';
+      
+      // Auto-optimize steps based on model
+      const optimizedSteps = getOptimalSteps(model);
 
       if (onStatusUpdate) {
         const mode = isImg2Img ? 'img2img' : 'text2img';
-        onStatusUpdate(`Generating image with ${model === 'flux-schnell' ? 'sd-turbo' : model} (${mode})...`);
+        onStatusUpdate(`Generating with ${model} (${optimizedSteps} steps)...`);
       }
 
       const requestBody: any = {
         prompt: mediaPrompt,
-        model: model, // Use the selected model
-        steps: steps, // Number of generation steps
+        model: model,
+        steps: optimizedSteps, // Auto-optimized steps
         width: width,
         height: height
       };

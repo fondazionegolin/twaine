@@ -728,81 +728,47 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-purple-500 transition-colors"
             />
 
-            {/* Advanced Settings - Collapsible */}
-            <details className="group">
-              <summary className="text-xs text-neutral-500 cursor-pointer hover:text-neutral-400 flex items-center gap-1">
-                <ChevronRight size={12} className="group-open:rotate-90 transition-transform" />
-                Advanced Settings
-              </summary>
-              <div className="mt-3 space-y-3 pl-4 border-l border-neutral-800">
-                {/* Model */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-neutral-500">Model</label>
-                  <select
-                    value={localImageModel}
-                    onChange={(e) => setLocalImageModel(e.target.value as 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl')}
-                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
-                  >
-                    <option value="sd-turbo">SD Turbo (Ultra Fast)</option>
-                    <option value="flux-schnell">Flux Schnell (Fast)</option>
-                    <option value="flux-dev">Flux Dev (Quality)</option>
-                    <option value="sdxl">SDXL (High Quality)</option>
-                  </select>
-                </div>
+            {/* Model & Format Selection */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Model */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-neutral-500">Model</label>
+                <select
+                  value={localImageModel}
+                  onChange={(e) => setLocalImageModel(e.target.value as 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl')}
+                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2.5 text-xs text-white outline-none focus:border-purple-500"
+                >
+                  <option value="sd-turbo">SD Turbo ⚡</option>
+                  <option value="flux-schnell">Flux Schnell</option>
+                  <option value="flux-dev">Flux Dev</option>
+                  <option value="sdxl">SDXL</option>
+                </select>
+              </div>
 
-                {/* Dimensions */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-neutral-500">Dimensions</label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="number"
-                      value={localImageWidth}
-                      onChange={(e) => setLocalImageWidth(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
-                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
-                    />
-                    <span className="text-neutral-600">×</span>
-                    <input
-                      type="number"
-                      value={localImageHeight}
-                      onChange={(e) => setLocalImageHeight(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
-                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
-                    />
-                  </div>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[
-                      { w: 512, h: 512, label: '1:1' },
-                      { w: 768, h: 512, label: '3:2' },
-                      { w: 1024, h: 576, label: '16:9' },
-                    ].map(({ w, h, label }) => (
-                      <button
-                        key={label}
-                        onClick={() => { setLocalImageWidth(w); setLocalImageHeight(h); }}
-                        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                          localImageWidth === w && localImageHeight === h
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Steps */}
-                <div className="space-y-1.5">
-                  <label className="text-xs text-neutral-500">Quality Steps: {localImageSteps}</label>
-                  <input
-                    type="range"
-                    value={localImageSteps}
-                    onChange={(e) => setLocalImageSteps(parseInt(e.target.value))}
-                    min="1"
-                    max="50"
-                    className="w-full h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                  />
+              {/* Aspect Ratio */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-neutral-500">Format</label>
+                <div className="flex gap-1.5">
+                  {[
+                    { w: 512, h: 512, label: '1:1' },
+                    { w: 768, h: 512, label: '3:2' },
+                    { w: 1024, h: 576, label: '16:9' },
+                  ].map(({ w, h, label }) => (
+                    <button
+                      key={label}
+                      onClick={() => { setLocalImageWidth(w); setLocalImageHeight(h); }}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        localImageWidth === w && localImageHeight === h
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-neutral-800/50 text-neutral-400 hover:bg-neutral-700 border border-neutral-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </details>
+            </div>
 
             {/* Upload / URL */}
             <div className="flex gap-2">
