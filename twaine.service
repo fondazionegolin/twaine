@@ -1,0 +1,13 @@
+[Unit]
+Description=twAIne Complete Service (Frontend + Backend)
+After=network.target mongodb.service
+Wants=mongodb.service twaine-backend.service twaine-frontend.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+
+[Install]
+WantedBy=multi-user.target
+Also=twaine-backend.service twaine-frontend.service

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
-import { authAPI, getAuthToken, clearAuthToken, checkServerHealth } from '../services/apiService';
+import { authAPI, checkServerHealth } from '../services/apiService';
 import * as DatabaseService from '../services/databaseService';
 
 interface AuthContextType {
@@ -49,20 +49,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setIsOnline(serverOnline);
 
         if (serverOnline) {
-          // Try to get user from backend using stored token
-          const token = getAuthToken();
-          if (token) {
-            try {
-              const { user: apiUser } = await authAPI.getCurrentUser();
-              setUser({
-                id: apiUser.id,
-                email: apiUser.email,
-                displayName: apiUser.displayName,
-              });
-            } catch {
-              // Token expired or invalid, clear it
-              clearAuthToken();
-            }
+          // Try to get user from backend using session cookie
+          try {
+            const { user: apiUser } = await authAPI.getCurrentUser();
+            setUser({
+              id: apiUser.id,
+              email: apiUser.email,
+              displayName: apiUser.displayName,
+            });
+          } catch {
+            // Session expired or invalid - user will need to login
+            console.log('No active session');
           }
         } else {
           // Fallback to local IndexedDB

@@ -9,13 +9,14 @@ import AuthScreen from './components/AuthScreen';
 import Logo from './components/Logo';
 import BookLayout from './components/BookLayout';
 import StyleEditor from './components/StyleEditor';
+import VisualNovelPlayer from './components/VisualNovelPlayer';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { StoryNode, ViewMode, WorldSettings, SavedStory, StoryStyle, ChatMessage, StoryVersion } from './types';
 import * as GeminiService from './services/geminiService';
 import * as DatabaseService from './services/databaseService';
 import { getGoogleFontsUrl, getAllFonts } from './utils/stylePresets';
 import { detectLanguage } from './utils/languageDetection';
-import { Play, PenTool, Sparkles, Loader2, ArrowRight, BookOpen, PlusCircle, Trash2, Home, Save, Coins, Sword, Backpack, Palette, X, Code, History, LogOut, Settings } from 'lucide-react';
+import { Play, PenTool, Sparkles, Loader2, ArrowRight, BookOpen, PlusCircle, Trash2, Home, Save, Coins, Sword, Backpack, Palette, X, Code, History, LogOut, Settings, Menu } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { css } from '@codemirror/lang-css';
 import { javascript } from '@codemirror/lang-javascript';
@@ -57,6 +58,7 @@ const AppContent: React.FC = () => {
     const [prompt, setPrompt] = useState(""); // Master prompt for the story
     const [isGeneratingSkeleton, setIsGeneratingSkeleton] = useState(false);
     const [viewMode, setViewMode] = useState<ViewMode>('LANDING'); // Start at landing page
+    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
     // Master prompt chat state
     const [promptChatHistory, setPromptChatHistory] = useState<ChatMessage[]>([]);
@@ -772,56 +774,111 @@ const AppContent: React.FC = () => {
     const currentNode = nodes.find(n => n.id === currentNodeId);
 
     return (
-        <div className="h-screen w-screen flex flex-col bg-neutral-950 text-neutral-100 overflow-hidden font-sans">
-
-            {/* Header */}
-            <header className="h-16 bg-neutral-900 border-b border-neutral-800 flex items-center px-6 justify-between shrink-0 z-10">
-                <div className="flex items-center gap-3">
-                    <Logo size="sm" showText={viewMode !== 'EDITOR'} />
-                    {viewMode === 'EDITOR' && (
-                        <input
-                            type="text"
-                            value={storyName}
-                            onChange={(e) => setStoryName(e.target.value)}
-                            className="bg-neutral-800 border border-neutral-700 rounded px-3 py-1.5 text-white text-sm font-medium focus:outline-none focus:border-blue-500 w-64"
-                            placeholder="Story Name"
-                        />
-                    )}
+        <div className="h-screen w-screen flex bg-neutral-950 text-neutral-100 overflow-hidden font-sans">
+            
+            {/* Mobile Sidebar */}
+            {showMobileSidebar && (
+                <div className="fixed inset-0 z-50 lg:hidden">
+                    <div className="absolute inset-0 bg-black/60" onClick={() => setShowMobileSidebar(false)} />
+                    <aside className="absolute left-0 top-0 h-full w-64 bg-neutral-900 border-r border-neutral-800 flex flex-col">
+                        <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
+                            <Logo size="sm" />
+                            <button onClick={() => setShowMobileSidebar(false)} className="p-1 text-neutral-400 hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <nav className="flex-1 p-4 space-y-2">
+                            <button
+                                onClick={() => { setViewMode('LANDING'); setShowMobileSidebar(false); }}
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'LANDING' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'}`}
+                            >
+                                <Home size={18} /> Home
+                            </button>
+                            <button
+                                onClick={() => { setViewMode('EDITOR'); setShowMobileSidebar(false); }}
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'EDITOR' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'}`}
+                            >
+                                <PenTool size={18} /> Editor
+                            </button>
+                            <button
+                                onClick={() => { startPlayer(); setShowMobileSidebar(false); }}
+                                disabled={nodes.length === 0}
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-30 ${viewMode === 'PLAYER' ? 'bg-green-600 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'}`}
+                            >
+                                <Play size={18} /> Play
+                            </button>
+                            
+                            {viewMode === 'EDITOR' && (
+                                <>
+                                    <div className="border-t border-neutral-800 my-3" />
+                                    <button
+                                        onClick={() => { setShowStylePrompt(!showStylePrompt); setShowMobileSidebar(false); }}
+                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentStyle ? 'bg-purple-900/50 text-purple-300' : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'}`}
+                                    >
+                                        <Palette size={18} /> Style
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowVersionHistory(!showVersionHistory); setShowMobileSidebar(false); }}
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-neutral-400 hover:text-white hover:bg-neutral-800/50"
+                                    >
+                                        <History size={18} /> History
+                                    </button>
+                                </>
+                            )}
+                        </nav>
+                        
+                        <div className="p-4 border-t border-neutral-800">
+                            <div className="text-xs text-neutral-500 mb-2 truncate">{user?.email}</div>
+                            <button
+                                onClick={logout}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-neutral-400 hover:text-white hover:bg-neutral-800/50"
+                            >
+                                <LogOut size={16} /> Sign Out
+                            </button>
+                        </div>
+                    </aside>
                 </div>
+            )}
 
-                <div className="flex items-center gap-4">
-                    {viewMode === 'EDITOR' && (
-                        <>
-                            {/* Global Settings Toggles */}
-                            <div className="flex items-center gap-2 mr-2">
-                                <button
-                                    onClick={() => toggleSetting('useInventory')}
-                                    className={`p-1.5 rounded flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider border transition-all ${worldSettings.useInventory ? 'bg-blue-900 border-blue-600 text-blue-200' : 'bg-neutral-800 border-neutral-700 text-neutral-500'}`}
-                                    title="Enable Inventory System"
-                                >
-                                    <Backpack size={14} /> Inv
-                                </button>
-                                <button
-                                    onClick={() => toggleSetting('useEconomy')}
-                                    className={`p-1.5 rounded flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider border transition-all ${worldSettings.useEconomy ? 'bg-yellow-900 border-yellow-600 text-yellow-200' : 'bg-neutral-800 border-neutral-700 text-neutral-500'}`}
-                                    title="Enable Economy (Gold)"
-                                >
-                                    <Coins size={14} /> Eco
-                                </button>
-                                <button
-                                    onClick={() => toggleSetting('useCombat')}
-                                    className={`p-1.5 rounded flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider border transition-all ${worldSettings.useCombat ? 'bg-red-900 border-red-600 text-red-200' : 'bg-neutral-800 border-neutral-700 text-neutral-500'}`}
-                                    title="Enable Combat System (HP)"
-                                >
-                                    <Sword size={14} /> Cbt
-                                </button>
-                                <button
-                                    onClick={() => setShowStylePrompt(!showStylePrompt)}
-                                    className={`p-1.5 rounded flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider border transition-all ${currentStyle ? 'bg-purple-900 border-purple-600 text-purple-200' : 'bg-neutral-800 border-neutral-700 text-neutral-500'}`}
-                                    title="Generate Global Style"
-                                >
-                                    <Palette size={14} /> Style
-                                </button>
+            {/* Main Layout */}
+            <div className="flex-1 flex flex-col min-w-0">
+                {/* Header */}
+                <header className="h-14 bg-neutral-900 border-b border-neutral-800 flex items-center px-3 lg:px-6 justify-between shrink-0 z-10">
+                    <div className="flex items-center gap-3 min-w-0">
+                        {/* Mobile menu button */}
+                        <button 
+                            onClick={() => setShowMobileSidebar(true)}
+                            className="lg:hidden p-1.5 text-neutral-400 hover:text-white"
+                        >
+                            <Menu size={20} />
+                        </button>
+                        
+                        <Logo size="sm" showText={false} className="hidden lg:flex" />
+                        
+                        {viewMode === 'EDITOR' && (
+                            <input
+                                type="text"
+                                value={storyName}
+                                onChange={(e) => setStoryName(e.target.value)}
+                                className="bg-neutral-800 border border-neutral-700 rounded px-2 lg:px-3 py-1 lg:py-1.5 text-white text-xs lg:text-sm font-medium focus:outline-none focus:border-blue-500 w-28 sm:w-40 lg:w-64"
+                                placeholder="Story Name"
+                            />
+                        )}
+                    </div>
+
+                    {/* Desktop Navigation */}
+                    <div className="hidden lg:flex items-center gap-4">
+                        {viewMode === 'EDITOR' && (
+                            <>
+                                <div className="flex items-center gap-2 mr-2">
+                                    <button
+                                        onClick={() => setShowStylePrompt(!showStylePrompt)}
+                                        className={`p-1.5 rounded flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider border transition-all ${currentStyle ? 'bg-purple-900 border-purple-600 text-purple-200' : 'bg-neutral-800 border-neutral-700 text-neutral-500'}`}
+                                        title="Generate Global Style"
+                                    >
+                                        <Palette size={14} /> Style
+                                    </button>
 
                                 {/* Style Prompt Popover */}
                                 {showStylePrompt && (
@@ -932,6 +989,7 @@ const AppContent: React.FC = () => {
                                     </span>
                                 )}
                             </button>
+                            {/* Code Editor button hidden - JS game generation not working
                             <button
                                 onClick={() => setShowCodeEditor(!showCodeEditor)}
                                 className={`p-1.5 rounded border ${showCodeEditor ? 'bg-blue-900 border-blue-600 text-blue-200' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border-neutral-700'}`}
@@ -939,9 +997,11 @@ const AppContent: React.FC = () => {
                             >
                                 <Code size={18} />
                             </button>
+                            */}
                         </div>
                     )}
 
+                    {/* Desktop Navigation */}
                     <div className="flex bg-neutral-800 rounded-lg p-1">
                         <button
                             onClick={() => setViewMode('LANDING')}
@@ -966,7 +1026,7 @@ const AppContent: React.FC = () => {
 
                     {/* User menu */}
                     <div className="flex items-center gap-3 ml-4 pl-4 border-l border-neutral-700">
-                        <span className="text-neutral-500 text-xs hidden lg:block">{user?.email}</span>
+                        <span className="text-neutral-500 text-xs">{user?.email}</span>
                         <button
                             onClick={logout}
                             className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white border border-neutral-700 transition-colors"
@@ -993,13 +1053,13 @@ const AppContent: React.FC = () => {
                             {nodes.length === 0 && !isGeneratingSkeleton && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-500 z-10 p-4 text-center">
                                     <BookOpen size={48} className="mb-4 opacity-20" />
-                                    <p className="mb-2">Enable game systems (Inventory, Economy, Combat) above.</p>
-                                    <p>Then generate a story skeleton or manually add nodes.</p>
+                                    <p className="text-sm">Enter a story prompt above and generate your story skeleton.</p>
                                 </div>
                             )}
                             <EditorGraph
                                 reactFlowNodes={reactFlowNodes}
                                 reactFlowEdges={reactFlowEdges}
+                                selectedNodeId={selectedNodeId}
                                 onNodePositionChange={handleNodePositionChange}
                                 onNodeRemove={handleNodeRemove}
                                 onEdgesChange={onReactFlowEdgesChange}
@@ -1009,16 +1069,26 @@ const AppContent: React.FC = () => {
                             />
                         </div>
                         {selectedNode && (
-                            <NodeInspector
-                                node={selectedNode}
-                                worldSettings={worldSettings}
-                                storyNodes={nodes} // Pass all nodes for contextual text generation
-                                masterPrompt={prompt} // Pass master prompt for contextual text generation
-                                storyLanguage={storyLanguage}
-                                currentStyle={currentStyle}
-                                onUpdate={handleNodeUpdate}
-                                onClose={() => setSelectedNodeId(null)}
-                            />
+                            <div className="fixed inset-0 z-40 md:relative md:inset-auto">
+                                {/* Mobile overlay backdrop */}
+                                <div 
+                                    className="absolute inset-0 bg-black/50 md:hidden"
+                                    onClick={() => setSelectedNodeId(null)}
+                                />
+                                {/* Inspector panel */}
+                                <div className="absolute right-0 top-0 h-full w-full max-w-md md:relative md:max-w-none">
+                                    <NodeInspector
+                                        node={selectedNode}
+                                        worldSettings={worldSettings}
+                                        storyNodes={nodes}
+                                        masterPrompt={prompt}
+                                        storyLanguage={storyLanguage}
+                                        currentStyle={currentStyle}
+                                        onUpdate={handleNodeUpdate}
+                                        onClose={() => setSelectedNodeId(null)}
+                                    />
+                                </div>
+                            </div>
                         )}
                     </ReactFlowProvider>
                 ) : (
@@ -1032,7 +1102,19 @@ const AppContent: React.FC = () => {
                         {currentStyle?.customCss && <style>{currentStyle.customCss}</style>}
                         {currentNode ? (
                             <>
-                                {/* Player Stats Header - Always visible */}
+                                {/* Visual Novel Layout Mode - Full screen, no header needed */}
+                                {currentStyle?.layoutMode === 'visual-novel' ? (
+                                    <VisualNovelPlayer
+                                        node={currentNode}
+                                        style={currentStyle}
+                                        onChoice={handlePlayerChoice}
+                                        onExit={() => setViewMode('EDITOR')}
+                                        gameState={gameState}
+                                        gameLog={gameLog}
+                                    />
+                                ) : (
+                                <>
+                                {/* Player Stats Header - Always visible (except VN mode) */}
                                 {(worldSettings.useCombat || worldSettings.useEconomy || worldSettings.useInventory) && (
                                     <div className="fixed top-20 left-1/2 -translate-x-1/2 z-20 flex flex-wrap gap-4 p-3 bg-neutral-900/90 backdrop-blur-sm rounded-lg border border-neutral-800 text-sm shadow-lg">
                                         {worldSettings.useCombat && (
@@ -1180,6 +1262,8 @@ const AppContent: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
+                                </>
+                                )}
                             </>
                         ) : (
                             <div className="flex items-center justify-center h-full text-neutral-500">
@@ -1190,98 +1274,13 @@ const AppContent: React.FC = () => {
                 )}
             </main>
 
-            {/* Code Editor Panel */}
+            {/* Code Editor Panel - Hidden: JS game generation not working
             {showCodeEditor && viewMode === 'EDITOR' && (
                 <div className="fixed right-0 top-16 bottom-0 w-96 bg-neutral-900 border-l border-neutral-700 shadow-2xl z-40 flex flex-col animate-in slide-in-from-right duration-300">
-                    <div className="p-4 border-b border-neutral-700 flex justify-between items-center">
-                        <h3 className="font-bold text-neutral-100">Code Editor</h3>
-                        <button onClick={() => setShowCodeEditor(false)} className="p-1 hover:bg-neutral-800 rounded">
-                            <X size={18} className="text-neutral-400" />
-                        </button>
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="flex border-b border-neutral-700">
-                        <button
-                            onClick={() => {
-                                setCodeEditorMode('global-css');
-                                setEditingGlobalCss(currentStyle?.customCss || "");
-                            }}
-                            className={`flex-1 px-4 py-2 text-sm font-medium ${codeEditorMode === 'global-css' ? 'bg-neutral-800 text-white border-b-2 border-blue-500' : 'text-neutral-400 hover:text-neutral-200'}`}
-                        >
-                            Global CSS
-                        </button>
-                        <button
-                            onClick={() => {
-                                setCodeEditorMode('node-code');
-                                const node = nodes.find(n => n.id === selectedNodeId);
-                                setEditingNodeCode(node?.interactionCode || "");
-                            }}
-                            className={`flex-1 px-4 py-2 text-sm font-medium ${codeEditorMode === 'node-code' ? 'bg-neutral-800 text-white border-b-2 border-blue-500' : 'text-neutral-400 hover:text-neutral-200'}`}
-                            disabled={!selectedNodeId}
-                        >
-                            Node Code {selectedNodeId && `(${nodes.find(n => n.id === selectedNodeId)?.title})`}
-                        </button>
-                    </div>
-
-                    {/* Editor Content */}
-                    <div className="flex-1 flex flex-col p-4 overflow-hidden">
-                        <CodeMirror
-                            value={codeEditorMode === 'global-css' ? editingGlobalCss : editingNodeCode}
-                            height="100%"
-                            theme="dark"
-                            extensions={codeEditorMode === 'global-css' ? [css()] : [javascript()]}
-                            onChange={(value) => {
-                                if (codeEditorMode === 'global-css') {
-                                    setEditingGlobalCss(value);
-                                } else {
-                                    setEditingNodeCode(value);
-                                }
-                            }}
-                            placeholder={codeEditorMode === 'global-css' ? '/* Add custom CSS here */\n.story-container {\n  /* Your styles */\n}' : '// Add interaction code here\ngameState.gold += 10;\nlog("Found 10 gold!");'}
-                            className="flex-1 overflow-auto rounded border border-neutral-700"
-                            basicSetup={{
-                                lineNumbers: true,
-                                highlightActiveLineGutter: true,
-                                highlightSpecialChars: true,
-                                foldGutter: true,
-                                drawSelection: true,
-                                dropCursor: true,
-                                allowMultipleSelections: true,
-                                indentOnInput: true,
-                                bracketMatching: true,
-                                closeBrackets: true,
-                                autocompletion: true,
-                                rectangularSelection: true,
-                                crosshairCursor: true,
-                                highlightActiveLine: true,
-                                highlightSelectionMatches: true,
-                                closeBracketsKeymap: true,
-                                searchKeymap: true,
-                                foldKeymap: true,
-                                completionKeymap: true,
-                                lintKeymap: true,
-                            }}
-                        />
-                        <button
-                            onClick={() => {
-                                if (codeEditorMode === 'global-css') {
-                                    setCurrentStyle(prev => prev ? { ...prev, customCss: editingGlobalCss } : undefined);
-                                    trackAction('Updated custom CSS');
-                                } else if (selectedNodeId) {
-                                    const node = nodes.find(n => n.id === selectedNodeId);
-                                    if (node) {
-                                        handleNodeUpdate({ ...node, interactionCode: editingNodeCode });
-                                    }
-                                }
-                            }}
-                            className="mt-3 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-medium"
-                        >
-                            Apply Changes
-                        </button>
-                    </div>
+                    ...
                 </div>
             )}
+            */}
 
             {/* Advanced Style Editor */}
             {showStyleEditor && viewMode === 'EDITOR' && (
@@ -1591,6 +1590,7 @@ const AppContent: React.FC = () => {
                     onClose={() => setShowVersionHistory(false)}
                 />
             )}
+            </div>
         </div>
     );
 };

@@ -4,10 +4,13 @@ import { Play } from 'lucide-react';
 
 interface StoryNodeData {
   label: string;
+  isSelected?: boolean;
   onPlayFromNode?: (nodeId: string) => void;
 }
 
-const StoryNode: React.FC<NodeProps<StoryNodeData>> = ({ id, data, selected }) => {
+const StoryNode: React.FC<NodeProps<StoryNodeData>> = ({ id, data }) => {
+  const selected = data.isSelected;
+  
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (data.onPlayFromNode) {
@@ -17,22 +20,12 @@ const StoryNode: React.FC<NodeProps<StoryNodeData>> = ({ id, data, selected }) =
 
   return (
     <div
-      className={`
-        relative group
-        min-w-[180px] max-w-[220px]
-        px-4 py-3
-        rounded-2xl
-        transition-all duration-200
-        ${selected 
-          ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-neutral-950' 
-          : ''
-        }
-      `}
+      className="relative group min-w-[180px] max-w-[220px] px-4 py-3 rounded-2xl transition-all duration-200"
       style={{
         // Neomorphic style - balanced raised bubble effect
         background: 'linear-gradient(160deg, #2d2d2d 0%, #1a1a1a 100%)',
         boxShadow: selected
-          ? '0 8px 24px rgba(0,0,0,0.6), 0 -2px 8px rgba(60,60,60,0.15), inset 0 1px 0 rgba(255,255,255,0.08)'
+          ? '0 0 0 2px #3b82f6, 0 8px 24px rgba(0,0,0,0.6)'
           : '0 6px 20px rgba(0,0,0,0.5), 0 -1px 6px rgba(60,60,60,0.1), inset 0 1px 0 rgba(255,255,255,0.05)',
         border: '1px solid rgba(255,255,255,0.06)',
       }}
@@ -99,4 +92,11 @@ const StoryNode: React.FC<NodeProps<StoryNodeData>> = ({ id, data, selected }) =
   );
 };
 
-export default memo(StoryNode);
+// Custom comparison to ensure re-render when isSelected changes
+export default memo(StoryNode, (prevProps, nextProps) => {
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.data.label === nextProps.data.label &&
+    prevProps.data.isSelected === nextProps.data.isSelected
+  );
+});

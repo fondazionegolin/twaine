@@ -122,53 +122,119 @@ export const generateStorySkeleton = async (
   }
 
   return retryOperation(async () => {
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: MODEL_TEXT,
-      contents: prompt,
-      config: {
-        systemInstruction: systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              title: { type: Type.STRING },
-              content: { type: Type.STRING, description: "The story content for this node." },
-              mediaType: { type: Type.STRING, enum: ["image", "video"], description: "Type of media for this node." },
-              position: {
-                type: Type.OBJECT,
-                properties: {
-                  x: { type: Type.NUMBER },
-                  y: { type: Type.NUMBER }
-                },
-                required: ["x", "y"]
-              },
-              connections: {
-                type: Type.ARRAY,
-                items: {
+    try {
+      const ai = getGeminiClient();
+      const response = await ai.models.generateContent({
+        model: MODEL_TEXT,
+        contents: prompt,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                title: { type: Type.STRING },
+                content: { type: Type.STRING, description: "The story content for this node." },
+                mediaType: { type: Type.STRING, enum: ["image", "video"], description: "Type of media for this node." },
+                position: {
                   type: Type.OBJECT,
                   properties: {
-                    id: { type: Type.STRING },
-                    targetNodeId: { type: Type.STRING },
-                    label: { type: Type.STRING, description: "Text on the button to choose this path." }
+                    x: { type: Type.NUMBER },
+                    y: { type: Type.NUMBER }
                   },
-                  required: ["id", "targetNodeId", "label"]
+                  required: ["x", "y"]
+                },
+                connections: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      targetNodeId: { type: Type.STRING },
+                      label: { type: Type.STRING, description: "Text on the button to choose this path." }
+                    },
+                    required: ["id", "targetNodeId", "label"]
+                  }
                 }
-              }
-            },
-            required: ["id", "title", "content", "position", "connections", "mediaType"]
+              },
+              required: ["id", "title", "content", "position", "connections", "mediaType"]
+            }
           }
         }
-      }
-    });
+      });
 
-    if (response.text) {
-      return JSON.parse(response.text) as StoryNode[];
+      if (response.text) {
+        return JSON.parse(response.text) as StoryNode[];
+      }
+      throw new Error("Failed to generate skeleton");
+    } catch (error) {
+      console.warn("Gemini failed, falling back to Claude...", error);
+
+      // Fallback to Claude with same detailed system prompt
+      const claudeSystemPrompt = `${systemInstruction}
+
+You MUST respond with ONLY valid JSON, no markdown, no explanation.
+The JSON must be an array of StoryNode objects with this exact structure:
+
+[
+  {
+    "id": "unique-string-id",
+    "title": "Node Title",
+    "content": "The story content/dialogue for this scene",
+    "mediaType": "image",
+    "position": { "x": 0, "y": 0 },
+    "connections": [
+      { "id": "connection-id", "targetNodeId": "target-node-id", "label": "Choice text" }
+    ]
+  }
+]
+
+IMPORTANT RULES:
+1. Generate at least 10 nodes
+2. Each node MUST have connections to other nodes (except ending nodes)
+3. The first node should be at position {x: 300, y: 0}
+4. Space nodes vertically by 200px and horizontally by 300px
+5. Create a branching narrative with multiple paths
+6. Connections must reference valid node IDs from your generated nodes
+7. All content must be in ${langName}`;
+
+      const anthropic = getAnthropicClient();
+      const msg = await anthropic.messages.create({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 4000,
+        system: claudeSystemPrompt,
+        messages: [
+          { role: "user", content: `Create a branching interactive story based on this prompt: ${prompt}` }
+        ]
+      });
+
+      const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
+      if (!text) throw new Error("No text returned from Claude");
+
+      // Extract JSON - try to find array
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const nodes = JSON.parse(jsonMatch[0]) as StoryNode[];
+        // Validate connections exist
+        console.log(`Claude generated ${nodes.length} nodes`);
+        return nodes;
+      }
+      throw new Error("Failed to parse JSON from Claude response");
     }
-    throw new Error("Failed to generate skeleton");
+  }, 1).then(nodes => {
+    // Post-processing validation to ensure all nodes have required fields
+    return nodes.map((node, index) => ({
+      ...node,
+      mediaType: node.mediaType || 'image',
+      position: node.position || {
+        x: (index % 3) * 300,
+        y: Math.floor(index / 3) * 200
+      },
+      connections: node.connections || []
+    }));
   });
 };
 
@@ -270,7 +336,7 @@ export const generateNodeText = async (
       if (!text) throw new Error("No text returned from Claude");
       return text.trim();
     }
-  });
+  }, 1);
 };
 
 /**
@@ -280,9 +346,10 @@ export const generateNodeText = async (
 export const generateNodeMedia = async (
   mediaPrompt: string,
   mediaType: 'image' | 'video',
-  model: 'flux-schnell' | 'flux-dev-gguf' | 'sdxl' = 'flux-schnell',
+  model: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl' = 'sd-turbo',
   width: number = 512,
   height: number = 512,
+  steps: number = 1,
   onStatusUpdate?: (msg: string) => void,
   referenceImage?: string // Optional reference image for img2img
 ): Promise<string> => {
@@ -300,17 +367,17 @@ export const generateNodeMedia = async (
 
       // Determine if we're using img2img or text2img
       const isImg2Img = !!referenceImage;
-      const endpoint = isImg2Img ? '/img2img' : '/generate';
+      const endpoint = isImg2Img ? '/api/v1/generate/img2img' : '/api/v1/generate/text2img';
 
       if (onStatusUpdate) {
         const mode = isImg2Img ? 'img2img' : 'text2img';
-        onStatusUpdate(`Generating image with ${model} (${mode})...`);
+        onStatusUpdate(`Generating image with ${model === 'flux-schnell' ? 'sd-turbo' : model} (${mode})...`);
       }
 
       const requestBody: any = {
         prompt: mediaPrompt,
-        model_id: model,
-        steps: 3,
+        model: model, // Use the selected model
+        steps: steps, // Number of generation steps
         width: width,
         height: height
       };
@@ -337,18 +404,17 @@ export const generateNodeMedia = async (
 
       if (!response.ok) {
         const error = await response.text();
-        throw new Error(`Flux API error: ${error}`);
+        throw new Error(`Image API error: ${error}`);
       }
 
       const result = await response.json();
 
-      // Response format: { image_base64: "...", message: "Success" }
-      if (result.image_base64) {
-        // Convert base64 to data URL
-        return `data:image/png;base64,${result.image_base64}`;
+      // Response format: { image: "data:image/png;base64,...", success: true }
+      if (result.success && result.image) {
+        return result.image;
       }
 
-      throw new Error(result.message || "Failed to generate image");
+      throw new Error(result.error || "Failed to generate image");
     } else { // mediaType === 'video'
       // Check API key for paid models
       if (typeof window.aistudio !== 'undefined' && !await window.aistudio.hasSelectedApiKey()) {
@@ -381,7 +447,7 @@ export const generateNodeMedia = async (
       }
       throw new Error("Failed to generate video or retrieve download link.");
     }
-  }, 5, 2000, onStatusUpdate);
+  }, 1, 2000, onStatusUpdate);
 };
 
 /**
@@ -515,7 +581,7 @@ export const generateStoryStyle = async (stylePrompt: string): Promise<StoryStyl
       }
       throw new Error("Failed to parse JSON from Claude response");
     }
-  });
+  }, 1);
 };
 
 /**
@@ -606,7 +672,7 @@ export const generateImageSceneDescription = async (
       const text = msg.content[0].type === 'text' ? msg.content[0].text : '';
       return text.trim();
     }
-  });
+  }, 1);
 };
 
 
@@ -725,7 +791,7 @@ canvas.addEventListener('mousemove', (e) => {
         return code;
       }
       throw new Error("Failed to generate interaction code");
-    });
+    }, 1);
   } catch (error) {
     console.warn("Gemini failed, falling back to Claude...", error);
 
@@ -850,7 +916,7 @@ export const iterateCode = async (
       code = code.replace(/\n?```$/gm, '');
       return code.trim();
     }
-  });
+  }, 1);
 };
 
 /**
@@ -919,7 +985,7 @@ export const iterateMasterPrompt = async (
       if (!text) throw new Error("No text returned from Claude");
       return text.trim();
     }
-  });
+  }, 1);
 };
 
 /**
@@ -1109,5 +1175,5 @@ Only include the fields relevant to the action. The "message" field is always re
       const result = JSON.parse(cleanJson) as StoryUpdateResult;
       return result;
     }
-  });
+  }, 1);
 };

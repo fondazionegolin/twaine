@@ -4,63 +4,38 @@
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
-// Token management
-let authToken: string | null = null;
-
-export const setAuthToken = (token: string | null) => {
-  authToken = token;
-  if (token) {
-    localStorage.setItem('twaine_token', token);
-  } else {
-    localStorage.removeItem('twaine_token');
-  }
-};
-
-export const getAuthToken = (): string | null => {
-  if (!authToken) {
-    authToken = localStorage.getItem('twaine_token');
-  }
-  return authToken;
-};
-
-export const clearAuthToken = () => {
-  authToken = null;
-  localStorage.removeItem('twaine_token');
-};
-
-// Generic fetch wrapper with auth
+// Generic fetch wrapper with auth (cookies)
 const apiFetch = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
-  const token = getAuthToken();
-  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
-  
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-  }
-  
+
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,
+    credentials: 'include', // Important: Send cookies with request
   });
-  
-  // Handle token expiration
+
+  // Handle session expiration
   if (response.status === 401) {
-    clearAuthToken();
-    window.dispatchEvent(new CustomEvent('auth:expired'));
+    // Only dispatch if we're not already on the login page or trying to login/register
+    if (!window.location.pathname.includes('/login') &&
+      !endpoint.includes('/auth/login') &&
+      !endpoint.includes('/auth/register')) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
   }
-  
+
   const data = await response.json();
-  
+
   if (!response.ok) {
     throw new Error(data.error || data.message || 'API request failed');
   }
-  
+
   return data;
 };
 
@@ -74,45 +49,36 @@ export interface AuthUser {
 
 export interface AuthResponse {
   message: string;
-  token: string;
   user: AuthUser;
 }
 
 export const authAPI = {
   register: async (email: string, password: string, displayName?: string): Promise<AuthResponse> => {
-    const response = await apiFetch<AuthResponse>('/auth/register', {
+    return apiFetch<AuthResponse>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, displayName }),
     });
-    setAuthToken(response.token);
-    return response;
   },
-  
+
   login: async (email: string, password: string): Promise<AuthResponse> => {
-    const response = await apiFetch<AuthResponse>('/auth/login', {
+    return apiFetch<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    setAuthToken(response.token);
-    return response;
   },
-  
-  logout: () => {
-    clearAuthToken();
+
+  logout: async () => {
+    try {
+      await apiFetch('/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout failed', e);
+    }
   },
-  
+
   getCurrentUser: async (): Promise<{ user: AuthUser }> => {
     return apiFetch<{ user: AuthUser }>('/auth/me');
   },
-  
-  refreshToken: async (): Promise<{ token: string }> => {
-    const response = await apiFetch<{ token: string }>('/auth/refresh', {
-      method: 'POST',
-    });
-    setAuthToken(response.token);
-    return response;
-  },
-  
+
   changePassword: async (currentPassword: string, newPassword: string): Promise<{ message: string }> => {
     return apiFetch<{ message: string }>('/auth/password', {
       method: 'PUT',
@@ -198,12 +164,12 @@ export const storiesAPI = {
     const response = await apiFetch<{ stories: StoryListItem[] }>('/stories');
     return response.stories;
   },
-  
+
   getById: async (id: string): Promise<Story> => {
     const response = await apiFetch<{ story: Story }>(`/stories/${id}`);
     return response.story;
   },
-  
+
   create: async (story: {
     name: string;
     prompt?: string;
@@ -217,7 +183,7 @@ export const storiesAPI = {
     });
     return response.story;
   },
-  
+
   update: async (id: string, updates: Partial<{
     name: string;
     prompt: string;
@@ -232,7 +198,7 @@ export const storiesAPI = {
     });
     return response.story;
   },
-  
+
   delete: async (id: string): Promise<void> => {
     await apiFetch<{ message: string }>(`/stories/${id}`, {
       method: 'DELETE',

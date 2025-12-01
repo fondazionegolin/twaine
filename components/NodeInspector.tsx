@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StoryNode, GenerationState, WorldSettings, StoryStyle, ChatMessage } from '../types';
-import { Wand2, Image as ImageIcon, Terminal, Loader2, X, Film, Send, Code2 } from 'lucide-react';
+import { StoryNode, GenerationState, WorldSettings, StoryStyle, ChatMessage, VNSprite, VNAudio } from '../types';
+import { Wand2, Image as ImageIcon, Terminal, Loader2, X, Film, Send, Code2, User, Music, Trash2, Plus, Volume2, ChevronDown, ChevronRight, Type, Gamepad2, Link, Upload, Sparkles } from 'lucide-react';
 import * as GeminiService from '../services/geminiService';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -17,25 +17,51 @@ interface NodeInspectorProps {
 }
 
 const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, storyNodes, masterPrompt, storyLanguage = 'en', currentStyle, onUpdate, onClose }) => {
+  // Check if we're in Visual Novel mode
+  const isVNMode = currentStyle?.layoutMode === 'visual-novel';
+  
   const [genState, setGenState] = useState<GenerationState>({ isGenerating: false });
   const [localTitle, setLocalTitle] = useState(node.title);
   const [localContent, setLocalContent] = useState(node.content);
   const [localMediaPrompt, setLocalMediaPrompt] = useState(node.mediaPrompt || "");
   const [localMediaType, setLocalMediaType] = useState<'image' | 'video'>(node.mediaType || 'image');
-  const [localImageModel, setLocalImageModel] = useState<'flux-schnell' | 'flux-dev-gguf' | 'sdxl'>(node.imageModel || 'flux-schnell');
+  const [localImageModel, setLocalImageModel] = useState<'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl'>(node.imageModel || 'sd-turbo');
   const [localImageWidth, setLocalImageWidth] = useState<number>(node.imageWidth || 512);
   const [localImageHeight, setLocalImageHeight] = useState<number>(node.imageHeight || 512);
+  const [localImageSteps, setLocalImageSteps] = useState<number>(node.imageSteps || 1);
   const [localInteraction, setLocalInteraction] = useState(node.interactionDescription || "");
   const [localCode, setLocalCode] = useState(node.interactionCode || "");
   const [localTextGenerationPrompt, setLocalTextGenerationPrompt] = useState("");
   const [localImageSceneDesc, setLocalImageSceneDesc] = useState(node.imageSceneDescription || "");
   const [statusMessage, setStatusMessage] = useState("");
 
+  // Visual Novel state
+  const [localVnBackground, setLocalVnBackground] = useState(node.vnBackground || "");
+  const [localVnSprites, setLocalVnSprites] = useState<VNSprite[]>(node.vnSprites || []);
+  const [localVnAudio, setLocalVnAudio] = useState<VNAudio[]>(node.vnAudio || []);
+  const [localVnSpeaker, setLocalVnSpeaker] = useState(node.vnSpeaker || "");
+  const [localVnTextEffect, setLocalVnTextEffect] = useState<'none' | 'typewriter' | 'fade'>(node.vnTextEffect || 'typewriter');
+
+  // Collapsible sections state
+  const [expandedSections, setExpandedSections] = useState({
+    content: true,
+    visuals: true,
+    interaction: false,
+    visualNovel: currentStyle?.layoutMode === 'visual-novel'
+  });
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   // Chat state for code iteration
   const [codeChatHistory, setCodeChatHistory] = useState<ChatMessage[]>(node.codeChatHistory || []);
   const [chatMessage, setChatMessage] = useState("");
   const [isChatProcessing, setIsChatProcessing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Sprite generation state
+  const [generatingSpriteIndex, setGeneratingSpriteIndex] = useState<number | null>(null);
 
   // Resizable panel state
   const [panelWidth, setPanelWidth] = useState(720);
@@ -47,15 +73,22 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     setLocalContent(node.content);
     setLocalMediaPrompt(node.mediaPrompt || "");
     setLocalMediaType(node.mediaType || 'image');
-    setLocalImageModel(node.imageModel || 'flux-schnell');
+    setLocalImageModel(node.imageModel || 'sd-turbo');
     setLocalImageWidth(node.imageWidth || 512);
     setLocalImageHeight(node.imageHeight || 512);
+    setLocalImageSteps(node.imageSteps || 1);
     setLocalInteraction(node.interactionDescription || "");
     setLocalCode(node.interactionCode || "");
     setLocalImageSceneDesc(node.imageSceneDescription || "");
     setCodeChatHistory(node.codeChatHistory || []);
     setLocalTextGenerationPrompt("");
     setStatusMessage("");
+    // Visual Novel
+    setLocalVnBackground(node.vnBackground || "");
+    setLocalVnSprites(node.vnSprites || []);
+    setLocalVnAudio(node.vnAudio || []);
+    setLocalVnSpeaker(node.vnSpeaker || "");
+    setLocalVnTextEffect(node.vnTextEffect || 'typewriter');
   }, [node]);
 
   // Auto-scroll chat
@@ -75,15 +108,22 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         imageModel: localImageModel,
         imageWidth: localImageWidth,
         imageHeight: localImageHeight,
+        imageSteps: localImageSteps,
         imageSceneDescription: localImageSceneDesc,
         interactionDescription: localInteraction,
         interactionCode: localCode,
-        codeChatHistory: codeChatHistory
+        codeChatHistory: codeChatHistory,
+        // Visual Novel fields
+        vnBackground: localVnBackground || undefined,
+        vnSprites: localVnSprites.length > 0 ? localVnSprites : undefined,
+        vnAudio: localVnAudio.length > 0 ? localVnAudio : undefined,
+        vnSpeaker: localVnSpeaker || undefined,
+        vnTextEffect: localVnTextEffect
       });
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [localTitle, localContent, localMediaPrompt, localMediaType, localImageSceneDesc, localInteraction, localCode, codeChatHistory]);
+  }, [localTitle, localContent, localMediaPrompt, localMediaType, localImageSceneDesc, localInteraction, localCode, codeChatHistory, localVnBackground, localVnSprites, localVnAudio, localVnSpeaker, localVnTextEffect]);
 
   const generateText = async () => {
     if (!localTextGenerationPrompt.trim()) return alert("Please enter a brief prompt for text generation.");
@@ -123,6 +163,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         localImageModel,
         localImageWidth,
         localImageHeight,
+        localImageSteps,
         (msg) => setStatusMessage(msg),
         referenceImage
       );
@@ -136,6 +177,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         imageModel: localImageModel,
         imageWidth: localImageWidth,
         imageHeight: localImageHeight,
+        imageSteps: localImageSteps,
         uploadedImage: false // Mark as generated, not uploaded
       });
       setStatusMessage("");
@@ -178,6 +220,82 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     link.href = node.mediaUri;
     link.download = `${node.title.replace(/\s+/g, '_')}_image.png`;
     link.click();
+  };
+
+  // Generate character sprite using SDXL
+  const generateCharacterSprite = async (index: number, description: string) => {
+    if (!description.trim()) {
+      alert("Please enter a character description first.");
+      return;
+    }
+
+    setGeneratingSpriteIndex(index);
+    
+    // Optimized prompt for VN sprite with transparent background style
+    const spritePrompt = `anime visual novel character sprite, full body portrait, ${description}, standing pose, facing viewer, simple clean lineart, cel shading, solid color background, white background, no background details, isolated character, high quality anime art style, game asset, transparent background ready`;
+
+    try {
+      const uri = await GeminiService.generateNodeMedia(
+        spritePrompt,
+        'image',
+        'sdxl', // Use SDXL for better quality sprites
+        512,    // Width
+        768,    // Height (taller for full body)
+        20,     // Steps for quality
+        (msg) => setStatusMessage(msg)
+      );
+
+      // Update the sprite with generated image
+      const updated = [...localVnSprites];
+      updated[index] = { ...updated[index], imageUri: uri };
+      setLocalVnSprites(updated);
+      setStatusMessage("");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate sprite. Try again or use a different description.");
+      setStatusMessage("Failed.");
+    }
+    
+    setGeneratingSpriteIndex(null);
+  };
+
+  // State for VN background generation
+  const [vnBgPrompt, setVnBgPrompt] = useState("");
+  const [isGeneratingVnBg, setIsGeneratingVnBg] = useState(false);
+
+  // Generate VN background using AI
+  const generateVnBackground = async () => {
+    if (!vnBgPrompt.trim()) {
+      alert("Please enter a background description first.");
+      return;
+    }
+
+    setIsGeneratingVnBg(true);
+    setStatusMessage("Generating background...");
+    
+    // Optimized prompt for VN background
+    const bgPrompt = `anime visual novel background, ${vnBgPrompt}, detailed environment, atmospheric lighting, no characters, wide shot, high quality anime art style, game background asset`;
+
+    try {
+      const uri = await GeminiService.generateNodeMedia(
+        bgPrompt,
+        'image',
+        localImageModel,
+        1024,   // Width - wider for backgrounds
+        768,    // Height
+        localImageSteps > 1 ? localImageSteps : 20,
+        (msg) => setStatusMessage(msg)
+      );
+
+      setLocalVnBackground(uri);
+      setStatusMessage("");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate background. Try again.");
+      setStatusMessage("Failed.");
+    }
+    
+    setIsGeneratingVnBg(false);
   };
 
   // Generate scene description
@@ -461,290 +579,714 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
       )}
 
       {/* RIGHT COLUMN - Node Inspector */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 bg-neutral-900">
         {/* Header */}
-        <div className="p-3 border-b border-neutral-700 flex justify-between items-center bg-neutral-900 flex-shrink-0">
-          <h2 className="font-semibold text-neutral-100 flex items-center gap-2 text-sm">
-            Node Inspector
-            <span className="text-[10px] text-green-400 font-normal">● Auto-saving</span>
-          </h2>
-          <button onClick={onClose} className="p-1 hover:bg-neutral-700 rounded text-neutral-400">
-            <X size={16} />
+        <div className="px-5 py-4 border-b border-neutral-800 flex justify-between items-center flex-shrink-0">
+          <div>
+            <h2 className="font-semibold text-white text-base">Node Inspector</h2>
+            <span className="text-xs text-emerald-500 flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              Auto-saving
+            </span>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors">
+            <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Title */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Title</label>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Title - Always visible */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-neutral-400">Title</label>
             <input
               type="text"
               value={localTitle}
               onChange={(e) => setLocalTitle(e.target.value)}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-sm text-white focus:ring-1 focus:ring-blue-500 outline-none"
+              className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-white font-medium focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition-colors"
+              placeholder="Enter node title..."
             />
           </div>
 
+          {/* Standard Mode Sections - Hidden in VN Mode */}
+          {!isVNMode && (
+          <>
           {/* Content Section */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Story Content</label>
-            <textarea
-              value={localContent}
-              onChange={(e) => setLocalContent(e.target.value)}
-              rows={4}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-neutral-300 text-sm focus:ring-1 focus:ring-blue-500 outline-none resize-none"
-              placeholder="Write the story segment here..."
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={localTextGenerationPrompt}
-                onChange={(e) => setLocalTextGenerationPrompt(e.target.value)}
-                placeholder="Brief prompt for AI generation..."
-                className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white outline-none"
-              />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                <Type size={14} className="text-indigo-400" />
+                Story Content
+              </label>
               <button
                 onClick={generateText}
                 disabled={genState.isGenerating || !localTextGenerationPrompt.trim()}
-                className="text-xs flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-2 rounded disabled:opacity-50"
+                className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 disabled:opacity-40 transition-colors"
               >
                 {genState.isGenerating && genState.type === 'TEXT' ? <Loader2 className="animate-spin" size={12} /> : <Wand2 size={12} />}
+                Generate
               </button>
             </div>
+            <textarea
+              value={localContent}
+              onChange={(e) => setLocalContent(e.target.value)}
+              rows={8}
+              className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-neutral-200 text-sm leading-relaxed focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 outline-none resize-none transition-colors"
+              placeholder="Write the story segment here..."
+            />
+            <input
+              type="text"
+              value={localTextGenerationPrompt}
+              onChange={(e) => setLocalTextGenerationPrompt(e.target.value)}
+              placeholder="AI prompt: describe what to generate..."
+              className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-indigo-500 transition-colors"
+              onKeyDown={(e) => e.key === 'Enter' && generateText()}
+            />
           </div>
 
-          {/* Compact Media Section */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Visuals</label>
+          <div className="border-t border-neutral-800"></div>
 
-            <div className="flex bg-neutral-800 rounded p-0.5 gap-0.5">
+          {/* Visuals Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                <ImageIcon size={14} className="text-purple-400" />
+                Image Generation
+              </label>
               <button
-                onClick={() => setLocalMediaType('image')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium transition-colors ${localMediaType === 'image' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:bg-neutral-700'
-                  }`}
+                onClick={generateMedia}
+                disabled={isGeneratingMedia || (!localImageSceneDesc && !localMediaPrompt)}
+                className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
               >
-                <ImageIcon size={14} /> Image
-              </button>
-              <button
-                onClick={() => setLocalMediaType('video')}
-                disabled
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-medium text-neutral-600 cursor-not-allowed line-through"
-                title="Video generation coming soon"
-              >
-                <Film size={14} /> Video
+                {isGeneratingMedia ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />}
+                Generate
               </button>
             </div>
 
-            {/* Model Selection (only for images) */}
-            {localMediaType === 'image' && (
-              <div className="space-y-1">
-                <label className="text-[9px] font-medium text-neutral-400">Model</label>
-                <select
-                  value={localImageModel}
-                  onChange={(e) => setLocalImageModel(e.target.value as 'flux-schnell' | 'flux-dev-gguf' | 'sdxl')}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-purple-500"
-                >
-                  <option value="flux-schnell">Flux Schnell (Fast)</option>
-                  <option value="flux-dev-gguf">Flux Dev GGUF (Quality)</option>
-                  <option value="sdxl">SDXL (Alternative)</option>
-                </select>
-
-                {/* Dimension Controls */}
-                <div className="space-y-1 mt-2">
-                  <label className="text-[9px] font-medium text-neutral-400">Dimensions</label>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        value={localImageWidth}
-                        onChange={(e) => setLocalImageWidth(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
-                        min="256"
-                        max="2048"
-                        step="64"
-                        className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-purple-500"
-                        placeholder="Width"
-                      />
-                    </div>
-                    <span className="text-neutral-500 text-xs flex items-center">×</span>
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        value={localImageHeight}
-                        onChange={(e) => setLocalImageHeight(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
-                        min="256"
-                        max="2048"
-                        step="64"
-                        className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-purple-500"
-                        placeholder="Height"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Preset Sizes */}
-                  <div className="flex gap-1 flex-wrap">
-                    <button
-                      onClick={() => { setLocalImageWidth(512); setLocalImageHeight(512); }}
-                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
-                    >
-                      512²
-                    </button>
-                    <button
-                      onClick={() => { setLocalImageWidth(768); setLocalImageHeight(768); }}
-                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
-                    >
-                      768²
-                    </button>
-                    <button
-                      onClick={() => { setLocalImageWidth(1024); setLocalImageHeight(1024); }}
-                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
-                    >
-                      1024²
-                    </button>
-                    <button
-                      onClick={() => { setLocalImageWidth(1024); setLocalImageHeight(768); }}
-                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
-                    >
-                      4:3
-                    </button>
-                    <button
-                      onClick={() => { setLocalImageWidth(1280); setLocalImageHeight(720); }}
-                      className="px-2 py-0.5 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded text-[10px]"
-                    >
-                      16:9
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Image Preview with Upload/Download */}
+            {/* Image Preview */}
             {isGeneratingMedia && (
-              <div className="h-24 bg-neutral-800 rounded border border-neutral-700 flex items-center justify-center text-blue-400 animate-pulse text-xs">
-                <Loader2 className="animate-spin mr-2" size={16} />
-                <span>{statusMessage || 'Generating...'}</span>
+              <div className="aspect-video bg-neutral-800/50 rounded-xl border border-neutral-700 flex flex-col items-center justify-center text-indigo-400">
+                <Loader2 className="animate-spin mb-2" size={24} />
+                <span className="text-xs text-neutral-400">{statusMessage || 'Generating image...'}</span>
               </div>
             )}
 
             {!isGeneratingMedia && node.mediaUri && (
-              <div className="relative group rounded overflow-hidden border border-neutral-700 h-32">
+              <div className="relative group rounded-xl overflow-hidden border border-neutral-700 aspect-video">
                 <img src={node.mediaUri} alt="Node visual" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                   <button
                     onClick={handleDownloadImage}
-                    className="text-white text-xs bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded flex items-center gap-1"
-                    title="Download image"
+                    className="text-white text-xs bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg flex items-center gap-2 font-medium"
                   >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     Download
                   </button>
                   <button
                     onClick={() => onUpdate({ ...node, mediaUri: undefined, mediaPrompt: "", uploadedImage: false })}
-                    className="text-white text-xs bg-red-600 hover:bg-red-500 px-3 py-1 rounded"
+                    className="text-white text-xs bg-red-600/80 hover:bg-red-600 px-4 py-2 rounded-lg font-medium"
                   >
                     Remove
                   </button>
                 </div>
-                {/* Indicator for uploaded vs generated */}
                 {node.uploadedImage && (
-                  <div className="absolute top-1 right-1 bg-green-600 text-white text-[9px] px-2 py-0.5 rounded">
+                  <div className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] px-2 py-1 rounded-md font-medium">
                     Uploaded
                   </div>
                 )}
               </div>
             )}
 
-            {/* Scene Description Section */}
-            <div className="space-y-1">
+            {/* Scene Description */}
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[9px] font-medium text-neutral-400">Scene Description (English)</label>
+                <label className="text-xs text-neutral-500">Scene Description</label>
                 <button
                   onClick={generateSceneDescription}
                   disabled={genState.isGenerating}
-                  className="text-[9px] text-blue-400 hover:text-blue-300 disabled:opacity-50"
-                  title="Generate AI scene description"
+                  className="text-xs text-purple-400 hover:text-purple-300 disabled:opacity-40 flex items-center gap-1"
                 >
-                  ✨ Generate
+                  <Wand2 size={10} /> Auto-generate
                 </button>
               </div>
               <textarea
                 value={localImageSceneDesc}
                 onChange={(e) => setLocalImageSceneDesc(e.target.value)}
                 rows={3}
-                placeholder="Detailed English description for image generation (e.g., 'A medieval knight in shining armor...')"
-                className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-300 outline-none resize-none focus:border-purple-500"
+                placeholder="Describe the scene for AI image generation..."
+                className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-3 text-sm text-neutral-300 outline-none resize-none focus:border-purple-500 transition-colors"
               />
             </div>
 
-            {/* Image Prompt (fallback) */}
+            {/* Simple Prompt Alternative */}
+            <input
+              type="text"
+              value={localMediaPrompt}
+              onChange={(e) => setLocalMediaPrompt(e.target.value)}
+              placeholder="Or enter a simple prompt..."
+              className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-purple-500 transition-colors"
+            />
+
+            {/* Advanced Settings - Collapsible */}
+            <details className="group">
+              <summary className="text-xs text-neutral-500 cursor-pointer hover:text-neutral-400 flex items-center gap-1">
+                <ChevronRight size={12} className="group-open:rotate-90 transition-transform" />
+                Advanced Settings
+              </summary>
+              <div className="mt-3 space-y-3 pl-4 border-l border-neutral-800">
+                {/* Model */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-neutral-500">Model</label>
+                  <select
+                    value={localImageModel}
+                    onChange={(e) => setLocalImageModel(e.target.value as 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl')}
+                    className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="sd-turbo">SD Turbo (Ultra Fast)</option>
+                    <option value="flux-schnell">Flux Schnell (Fast)</option>
+                    <option value="flux-dev">Flux Dev (Quality)</option>
+                    <option value="sdxl">SDXL (High Quality)</option>
+                  </select>
+                </div>
+
+                {/* Dimensions */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-neutral-500">Dimensions</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      value={localImageWidth}
+                      onChange={(e) => setLocalImageWidth(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
+                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                    />
+                    <span className="text-neutral-600">×</span>
+                    <input
+                      type="number"
+                      value={localImageHeight}
+                      onChange={(e) => setLocalImageHeight(Math.max(256, Math.min(2048, parseInt(e.target.value) || 512)))}
+                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[
+                      { w: 512, h: 512, label: '1:1' },
+                      { w: 768, h: 512, label: '3:2' },
+                      { w: 1024, h: 576, label: '16:9' },
+                    ].map(({ w, h, label }) => (
+                      <button
+                        key={label}
+                        onClick={() => { setLocalImageWidth(w); setLocalImageHeight(h); }}
+                        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                          localImageWidth === w && localImageHeight === h
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Steps */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-neutral-500">Quality Steps: {localImageSteps}</label>
+                  <input
+                    type="range"
+                    value={localImageSteps}
+                    onChange={(e) => setLocalImageSteps(parseInt(e.target.value))}
+                    min="1"
+                    max="50"
+                    className="w-full h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  />
+                </div>
+              </div>
+            </details>
+
+            {/* Upload / URL */}
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={localMediaPrompt}
-                onChange={(e) => setLocalMediaPrompt(e.target.value)}
-                placeholder="Or enter a simple image prompt..."
-                className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white outline-none"
-              />
-              <button
-                onClick={generateMedia}
-                disabled={isGeneratingMedia || localMediaType === 'video'}
-                className="bg-purple-600 hover:bg-purple-700 text-white p-1.5 rounded disabled:opacity-50"
-                title="Generate image"
-              >
-                {isGeneratingMedia ? <Loader2 className="animate-spin" size={14} /> : <ImageIcon size={14} />}
-              </button>
-            </div>
-
-            {/* Upload Button */}
-            <div className="relative">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleUploadImage}
-                className="hidden"
-                id="image-upload"
-              />
+              <input type="file" accept="image/*" onChange={handleUploadImage} className="hidden" id="image-upload" />
               <label
                 htmlFor="image-upload"
-                className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 py-2 px-3 rounded text-xs cursor-pointer transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700 text-neutral-400 hover:text-white py-2.5 rounded-lg text-xs cursor-pointer transition-colors"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Upload Image from PC
+                <Upload size={14} /> Upload Image
               </label>
+              <div className="flex-1 relative">
+                <input
+                  type="url"
+                  placeholder="Paste URL..."
+                  className="w-full h-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 pl-8 text-xs text-white outline-none focus:border-indigo-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const url = (e.target as HTMLInputElement).value.trim();
+                      if (url) {
+                        onUpdate({ ...node, mediaUri: url, uploadedImage: false });
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }
+                  }}
+                />
+                <Link size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+              </div>
             </div>
           </div>
 
-          {/* Interaction Description */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Interaction Logic</label>
-              {/* Active Systems Pills */}
-              <div className="flex gap-1">
-                {worldSettings.useInventory && <span className="px-1.5 py-0.5 bg-blue-900/50 text-blue-300 rounded text-[9px] border border-blue-800">Inv</span>}
-                {worldSettings.useEconomy && <span className="px-1.5 py-0.5 bg-yellow-900/50 text-yellow-300 rounded text-[9px] border border-yellow-800">Gold</span>}
-                {worldSettings.useCombat && <span className="px-1.5 py-0.5 bg-red-900/50 text-red-300 rounded text-[9px] border border-red-800">HP</span>}
+          {/* Interaction Section - Hidden: JS game generation not working
+          <div className="border border-neutral-700 rounded-lg overflow-hidden">
+            <button
+              onClick={() => toggleSection('interaction')}
+              className="w-full flex items-center justify-between p-3 bg-neutral-800/50 hover:bg-neutral-800 transition-colors"
+            >
+              <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
+                <Gamepad2 size={12} /> Interaction Logic
+              </span>
+            </button>
+          </div>
+          */}
+          </>
+          )}
+
+          {/* Visual Novel Section - Only in VN Mode */}
+          {isVNMode && (
+          <div className="space-y-5">
+            {/* Dialogue Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                  <Type size={14} className="text-pink-400" />
+                  Dialogue / Narration
+                </label>
+                <button
+                  onClick={generateText}
+                  disabled={genState.isGenerating || !localTextGenerationPrompt.trim()}
+                  className="text-xs flex items-center gap-1.5 text-pink-400 hover:text-pink-300 disabled:opacity-40 transition-colors"
+                >
+                  {genState.isGenerating && genState.type === 'TEXT' ? <Loader2 className="animate-spin" size={12} /> : <Wand2 size={12} />}
+                  Generate
+                </button>
+              </div>
+              <textarea
+                value={localContent}
+                onChange={(e) => setLocalContent(e.target.value)}
+                rows={6}
+                className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-3 text-neutral-200 text-sm leading-relaxed focus:border-pink-500 focus:ring-1 focus:ring-pink-500/20 outline-none resize-none transition-colors"
+                placeholder="Write the dialogue or narration for this scene..."
+              />
+              <input
+                type="text"
+                value={localTextGenerationPrompt}
+                onChange={(e) => setLocalTextGenerationPrompt(e.target.value)}
+                placeholder="AI prompt: describe the scene mood..."
+                className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-pink-500 transition-colors"
+                onKeyDown={(e) => e.key === 'Enter' && generateText()}
+              />
+            </div>
+
+            <div className="border-t border-neutral-800"></div>
+
+            {/* Speaker & Effects */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                  <User size={14} className="text-pink-400" />
+                  Speaker
+                </label>
+                <input
+                  type="text"
+                  value={localVnSpeaker}
+                  onChange={(e) => setLocalVnSpeaker(e.target.value)}
+                  placeholder="Character name..."
+                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-pink-500 transition-colors"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-neutral-400">Text Effect</label>
+                <div className="flex gap-1.5">
+                  {(['none', 'typewriter', 'fade'] as const).map(effect => (
+                    <button
+                      key={effect}
+                      onClick={() => setLocalVnTextEffect(effect)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        localVnTextEffect === effect 
+                          ? 'bg-pink-600 text-white' 
+                          : 'bg-neutral-800/50 text-neutral-400 hover:bg-neutral-700 border border-neutral-700'
+                      }`}
+                    >
+                      {effect.charAt(0).toUpperCase() + effect.slice(1)}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <textarea
-              value={localInteraction}
-              onChange={(e) => setLocalInteraction(e.target.value)}
-              rows={2}
-              placeholder="E.g. 'Create a rhythm game where player presses A and L keys'"
-              className="w-full bg-neutral-800 border border-neutral-700 rounded px-3 py-2 text-xs text-neutral-300 outline-none resize-none"
-            />
-            <button
-              onClick={generateCode}
-              disabled={genState.isGenerating}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded text-xs flex items-center justify-center gap-2 disabled:opacity-50 font-medium"
-            >
-              {genState.isGenerating && genState.type === 'CODE' ? <Loader2 className="animate-spin" size={14} /> : <Terminal size={14} />}
-              Generate JavaScript
-            </button>
+            <div className="border-t border-neutral-800"></div>
+
+            {/* Background Image */}
+            <div className="space-y-3">
+              <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                <ImageIcon size={14} className="text-pink-400" />
+                Background Image
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        setLocalVnBackground(ev.target?.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="hidden"
+                  id="vn-bg-upload"
+                />
+                <label
+                  htmlFor="vn-bg-upload"
+                  className="flex-1 flex items-center justify-center gap-2 bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700 text-neutral-400 hover:text-white py-2.5 rounded-lg text-xs cursor-pointer transition-colors"
+                >
+                  <Upload size={14} /> Upload
+                </label>
+                <div className="flex-1 relative">
+                  <input
+                    type="url"
+                    placeholder="Paste URL..."
+                    className="w-full h-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 pl-8 text-xs text-white outline-none focus:border-pink-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const url = (e.target as HTMLInputElement).value.trim();
+                        if (url) {
+                          setLocalVnBackground(url);
+                          (e.target as HTMLInputElement).value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <Link size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                </div>
+                {localVnBackground && (
+                  <button
+                    onClick={() => setLocalVnBackground("")}
+                    className="p-2.5 bg-red-900/50 hover:bg-red-800 text-red-300 rounded-lg"
+                    title="Remove background"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+              
+              {/* Background Preview */}
+              {localVnBackground && (
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-neutral-700">
+                  <img src={localVnBackground} alt="BG Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+              
+              {/* AI Background Generator */}
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={vnBgPrompt}
+                  onChange={(e) => setVnBgPrompt(e.target.value)}
+                  placeholder="AI prompt for background..."
+                  className="flex-1 bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-pink-500 transition-colors"
+                  onKeyDown={(e) => e.key === 'Enter' && generateVnBackground()}
+                />
+                <button
+                  onClick={generateVnBackground}
+                  disabled={isGeneratingVnBg}
+                  className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white text-xs font-medium px-3 py-2.5 rounded-lg transition-colors"
+                >
+                  {isGeneratingVnBg ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  Generate
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t border-neutral-800"></div>
+
+            {/* Character Sprites */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                  <User size={14} className="text-pink-400" /> Character Sprites
+                </label>
+                <button
+                  onClick={() => {
+                    const newSprite: VNSprite = {
+                      id: `sprite_${Date.now()}`,
+                      name: '',
+                      imageUri: '',
+                      position: 'center',
+                      scale: 1
+                    };
+                    setLocalVnSprites([...localVnSprites, newSprite]);
+                  }}
+                  className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1"
+                >
+                  <Plus size={12} /> Add
+                </button>
+              </div>
+              
+              {localVnSprites.map((sprite, index) => (
+                <div key={sprite.id} className="bg-neutral-800/30 rounded-lg p-3 space-y-3 border border-neutral-700">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={sprite.name}
+                      onChange={(e) => {
+                        const updated = [...localVnSprites];
+                        updated[index] = { ...sprite, name: e.target.value };
+                        setLocalVnSprites(updated);
+                      }}
+                      placeholder="Character name"
+                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                    />
+                    <select
+                      value={sprite.position}
+                      onChange={(e) => {
+                        const updated = [...localVnSprites];
+                        updated[index] = { ...sprite, position: e.target.value as 'left' | 'center' | 'right' };
+                        setLocalVnSprites(updated);
+                      }}
+                      className="bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                    <button
+                      onClick={() => setLocalVnSprites(localVnSprites.filter((_, i) => i !== index))}
+                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const updated = [...localVnSprites];
+                            updated[index] = { ...sprite, imageUri: ev.target?.result as string };
+                            setLocalVnSprites(updated);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden"
+                      id={`sprite-upload-${sprite.id}`}
+                    />
+                    <label
+                      htmlFor={`sprite-upload-${sprite.id}`}
+                      className="flex items-center gap-1 bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700 text-neutral-400 py-2 px-3 rounded-lg text-xs cursor-pointer"
+                    >
+                      <Upload size={12} />
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Or paste sprite URL..."
+                      defaultValue={sprite.imageUri?.startsWith('http') ? sprite.imageUri : ''}
+                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-pink-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const url = (e.target as HTMLInputElement).value.trim();
+                          if (url) {
+                            const updated = [...localVnSprites];
+                            updated[index] = { ...sprite, imageUri: url };
+                            setLocalVnSprites(updated);
+                          }
+                        }
+                      }}
+                    />
+                    {sprite.imageUri && (
+                      <img src={sprite.imageUri} alt={sprite.name} className="h-10 w-10 object-contain rounded-lg border border-neutral-700" />
+                    )}
+                  </div>
+                  {/* AI Sprite Generator */}
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      placeholder="AI: describe character..."
+                      className="flex-1 bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-pink-500"
+                      id={`sprite-desc-${sprite.id}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          generateCharacterSprite(index, (e.target as HTMLInputElement).value);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.getElementById(`sprite-desc-${sprite.id}`) as HTMLInputElement;
+                        generateCharacterSprite(index, input?.value || '');
+                      }}
+                      disabled={generatingSpriteIndex === index}
+                      className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white py-2 px-3 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      {generatingSpriteIndex === index ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      Generate
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-neutral-800"></div>
+
+            {/* Audio */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-neutral-400 flex items-center gap-2">
+                  <Music size={14} className="text-pink-400" /> Audio
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const newAudio: VNAudio = {
+                        type: 'bgm',
+                        uri: '',
+                        name: 'Background Music',
+                        loop: true,
+                        volume: 0.5
+                      };
+                      setLocalVnAudio([...localVnAudio, newAudio]);
+                    }}
+                    className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1"
+                  >
+                    <Plus size={12} /> BGM
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newAudio: VNAudio = {
+                        type: 'sfx',
+                        uri: '',
+                        name: 'Sound Effect',
+                        loop: false,
+                        volume: 1
+                      };
+                      setLocalVnAudio([...localVnAudio, newAudio]);
+                    }}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                  >
+                    <Plus size={12} /> SFX
+                  </button>
+                </div>
+              </div>
+
+              {localVnAudio.map((audio, index) => (
+                <div key={index} className="bg-neutral-800/30 rounded-lg p-3 space-y-2 border border-neutral-700">
+                  <div className="flex gap-2 items-center">
+                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${audio.type === 'bgm' ? 'bg-pink-900/50 text-pink-300' : 'bg-indigo-900/50 text-indigo-300'}`}>
+                      {audio.type.toUpperCase()}
+                    </span>
+                    <input
+                      type="text"
+                      value={audio.name || ''}
+                      onChange={(e) => {
+                        const updated = [...localVnAudio];
+                        updated[index] = { ...audio, name: e.target.value };
+                        setLocalVnAudio(updated);
+                      }}
+                      placeholder="Audio name"
+                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                    />
+                    <button
+                      onClick={() => setLocalVnAudio(localVnAudio.filter((_, i) => i !== index))}
+                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const updated = [...localVnAudio];
+                            updated[index] = { ...audio, uri: ev.target?.result as string };
+                            setLocalVnAudio(updated);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden"
+                      id={`audio-upload-${index}`}
+                    />
+                    <label
+                      htmlFor={`audio-upload-${index}`}
+                      className="flex items-center gap-1 bg-neutral-800/50 hover:bg-neutral-800 border border-neutral-700 text-neutral-400 py-2 px-3 rounded-lg text-xs cursor-pointer"
+                    >
+                      <Upload size={12} />
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Or paste audio URL..."
+                      defaultValue={audio.uri?.startsWith('http') ? audio.uri : ''}
+                      className="flex-1 bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-pink-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const url = (e.target as HTMLInputElement).value.trim();
+                          if (url) {
+                            const updated = [...localVnAudio];
+                            updated[index] = { ...audio, uri: url };
+                            setLocalVnAudio(updated);
+                          }
+                        }
+                      }}
+                    />
+                    {audio.uri && <Volume2 size={14} className="text-emerald-400" />}
+                  </div>
+                  <div className="flex gap-4 items-center">
+                    <label className="flex items-center gap-2 text-xs text-neutral-400">
+                      <input
+                        type="checkbox"
+                        checked={audio.loop ?? (audio.type === 'bgm')}
+                        onChange={(e) => {
+                          const updated = [...localVnAudio];
+                          updated[index] = { ...audio, loop: e.target.checked };
+                          setLocalVnAudio(updated);
+                        }}
+                        className="accent-pink-500 w-4 h-4"
+                      />
+                      Loop
+                    </label>
+                    <div className="flex-1 flex items-center gap-2">
+                      <label className="text-xs text-neutral-500">Vol:</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={audio.volume ?? 1}
+                        onChange={(e) => {
+                          const updated = [...localVnAudio];
+                          updated[index] = { ...audio, volume: parseFloat(e.target.value) };
+                          setLocalVnAudio(updated);
+                        }}
+                        className="flex-1 accent-pink-500"
+                      />
+                      <span className="text-xs text-neutral-400 w-8">{Math.round((audio.volume ?? 1) * 100)}%</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+          )}
         </div>
       </div>
     </div>

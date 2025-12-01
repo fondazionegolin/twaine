@@ -16,6 +16,7 @@ import StoryNode from './StoryNode';
 interface EditorGraphProps {
   reactFlowNodes: Node[];
   reactFlowEdges: Edge[];
+  selectedNodeId: string | null;
   onNodePositionChange: (nodeId: string, position: { x: number; y: number }) => void;
   onNodeRemove: (nodeId: string) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
@@ -27,6 +28,7 @@ interface EditorGraphProps {
 const EditorGraph: React.FC<EditorGraphProps> = ({
   reactFlowNodes,
   reactFlowEdges,
+  selectedNodeId,
   onNodePositionChange,
   onNodeRemove,
   onEdgesChange,
@@ -39,17 +41,18 @@ const EditorGraph: React.FC<EditorGraphProps> = ({
     storyNode: StoryNode
   }), []);
 
-  // Transform nodes to use custom type and inject play handler
+  // Transform nodes to use custom type, inject play handler, and set selected state
   const nodesWithType = useMemo(() => {
     return reactFlowNodes.map(node => ({
       ...node,
       type: 'storyNode',
       data: {
         ...node.data,
+        isSelected: node.id === selectedNodeId,
         onPlayFromNode
       }
     }));
-  }, [reactFlowNodes, onPlayFromNode]);
+  }, [reactFlowNodes, onPlayFromNode, selectedNodeId]);
 
   // Local state for smooth dragging - syncs from props but updates locally during drag
   const [localNodes, setLocalNodes] = useState<Node[]>(nodesWithType);
@@ -59,9 +62,25 @@ const EditorGraph: React.FC<EditorGraphProps> = ({
     setLocalNodes(nodesWithType);
   }, [nodesWithType]);
 
+  // Update selection state when selectedNodeId changes
+  useEffect(() => {
+    setLocalNodes(nodes => nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        isSelected: node.id === selectedNodeId
+      }
+    })));
+  }, [selectedNodeId]);
+
   // Handle node changes locally for smooth dragging
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setLocalNodes(nds => applyNodeChanges(changes, nds));
+    // Filter out selection changes - we handle selection ourselves via onNodeClick
+    const nonSelectionChanges = changes.filter(change => change.type !== 'select');
+    
+    if (nonSelectionChanges.length > 0) {
+      setLocalNodes(nds => applyNodeChanges(nonSelectionChanges, nds));
+    }
 
     // Handle removals immediately
     for (const change of changes) {

@@ -1,0 +1,7 @@
+tunnel: twaine-tunnel
+credentials-file: /home/ale/.cloudflared/twaine-tunnel.json
+
+ingress:
+  - hostname: twaine.golinelli.ai
+    service: http://localhost:3000
+  - service: http_status:404

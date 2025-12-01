@@ -11,6 +11,26 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+// Visual Novel sprite definition
+export interface VNSprite {
+  id: string;
+  name: string; // Character name
+  imageUri: string; // Base64 or URL
+  position: 'left' | 'center' | 'right'; // Position on screen
+  expression?: string; // Optional expression label
+  scale?: number; // Scale factor (default 1)
+  offsetY?: number; // Vertical offset in pixels
+}
+
+// Visual Novel audio definition
+export interface VNAudio {
+  type: 'bgm' | 'sfx'; // Background music or sound effect
+  uri: string; // Audio file URI or base64
+  name?: string; // Display name
+  loop?: boolean; // Loop audio (default true for bgm, false for sfx)
+  volume?: number; // Volume 0-1 (default 1)
+}
+
 export interface StoryNode {
   id: string;
   title: string;
@@ -18,9 +38,10 @@ export interface StoryNode {
   mediaPrompt?: string; // Prompt for image or video generation
   mediaUri?: string; // Base64 for image, or video URI
   mediaType?: 'image' | 'video'; // 'image' by default
-  imageModel?: 'flux-schnell' | 'flux-dev-gguf' | 'sdxl'; // Image generation model
+  imageModel?: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl'; // Image generation model
   imageWidth?: number; // Image width (default 512)
   imageHeight?: number; // Image height (default 512)
+  imageSteps?: number; // Number of generation steps (default varies by model)
   uploadedImage?: boolean; // Flag to indicate if image was uploaded (not generated)
   imageSceneDescription?: string; // English description of the scene for image generation
   interactionDescription?: string;
@@ -28,6 +49,12 @@ export interface StoryNode {
   codeChatHistory?: ChatMessage[]; // Chat history for iterative code editing
   connections: StoryConnection[];
   position: { x: number; y: number };
+  // Visual Novel specific fields
+  vnBackground?: string; // Full-screen background image URI
+  vnSprites?: VNSprite[]; // Character sprites to display
+  vnAudio?: VNAudio[]; // Audio tracks (BGM and SFX)
+  vnSpeaker?: string; // Name of the speaking character (shown in dialogue box)
+  vnTextEffect?: 'none' | 'typewriter' | 'fade'; // Text animation effect
 }
 
 export type ViewMode = 'LANDING' | 'EDITOR' | 'PLAYER';
@@ -48,7 +75,7 @@ export interface WorldSettings {
 export type FontCategory = 'modern' | 'serif' | 'calligraphic' | 'medieval' | 'fantasy' | 'typewriter' | 'handwritten';
 
 // Layout modes for story display
-export type LayoutMode = 'standard' | 'book' | 'scroll' | 'manuscript';
+export type LayoutMode = 'standard' | 'book' | 'scroll' | 'manuscript' | 'visual-novel';
 
 // Texture/pattern types
 export type TextureType = 'none' | 'paper' | 'parchment' | 'leather' | 'fabric' | 'stone' | 'wood' | 'custom';

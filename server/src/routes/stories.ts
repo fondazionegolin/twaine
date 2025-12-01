@@ -1,6 +1,13 @@
 import { Router, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
-import { Story } from '../models/Story.js';
+import {
+  createStory,
+  findStoriesByUserId,
+  findStoryById,
+  updateStory,
+  deleteStory,
+  checkStoryOwnership,
+} from '../repositories/storyRepository.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -11,21 +18,13 @@ router.use(authenticate);
 // GET /api/stories - Get all stories for current user
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const stories = await Story.find({ userId: req.userId })
-      .select('name prompt createdAt updatedAt nodes')
-      .sort({ updatedAt: -1 });
+    if (!req.userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
 
-    // Transform to include node count
-    const storiesWithCount = stories.map(story => ({
-      id: story._id,
-      name: story.name,
-      prompt: story.prompt,
-      nodeCount: story.nodes?.length || 0,
-      createdAt: story.createdAt,
-      updatedAt: story.updatedAt,
-    }));
-
-    res.json({ stories: storiesWithCount });
+    const stories = await findStoriesByUserId(req.userId);
+    res.json({ stories });
   } catch (error) {
     console.error('Get stories error:', error);
     res.status(500).json({ error: 'Failed to get stories' });
@@ -35,7 +34,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // GET /api/stories/:id - Get a single story
 router.get(
   '/:id',
-  param('id').isMongoId().withMessage('Invalid story ID'),
+  param('id').isUUID().withMessage('Invalid story ID'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
@@ -44,29 +43,25 @@ router.get(
         return;
       }
 
-      const story = await Story.findOne({
-        _id: req.params.id,
-        userId: req.userId,
-      });
+      if (!req.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const story = await findStoryById(req.params.id);
 
       if (!story) {
         res.status(404).json({ error: 'Story not found' });
         return;
       }
 
-      res.json({
-        story: {
-          id: story._id,
-          name: story.name,
-          prompt: story.prompt,
-          nodes: story.nodes,
-          worldSettings: story.worldSettings,
-          style: story.style,
-          versions: story.versions,
-          createdAt: story.createdAt,
-          updatedAt: story.updatedAt,
-        },
-      });
+      // Check ownership
+      if (story.userId !== req.userId) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+
+      res.json({ story });
     } catch (error) {
       console.error('Get story error:', error);
       res.status(500).json({ error: 'Failed to get story' });
@@ -92,35 +87,25 @@ router.post(
         return;
       }
 
+      if (!req.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const { name, prompt, nodes, worldSettings, style } = req.body;
 
-      const story = new Story({
+      const story = await createStory({
         userId: req.userId,
         name,
-        prompt: prompt || '',
-        nodes: nodes || [],
-        worldSettings: worldSettings || {
-          useInventory: false,
-          useEconomy: false,
-          useCombat: false,
-        },
+        prompt,
+        nodes,
+        worldSettings,
         style,
       });
 
-      await story.save();
-
       res.status(201).json({
         message: 'Story created',
-        story: {
-          id: story._id,
-          name: story.name,
-          prompt: story.prompt,
-          nodes: story.nodes,
-          worldSettings: story.worldSettings,
-          style: story.style,
-          createdAt: story.createdAt,
-          updatedAt: story.updatedAt,
-        },
+        story,
       });
     } catch (error) {
       console.error('Create story error:', error);
@@ -133,7 +118,7 @@ router.post(
 router.put(
   '/:id',
   [
-    param('id').isMongoId().withMessage('Invalid story ID'),
+    param('id').isUUID().withMessage('Invalid story ID'),
     body('name').optional().trim().notEmpty(),
     body('prompt').optional().trim(),
     body('nodes').optional().isArray(),
@@ -149,41 +134,34 @@ router.put(
         return;
       }
 
-      const story = await Story.findOne({
-        _id: req.params.id,
-        userId: req.userId,
-      });
+      if (!req.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
 
-      if (!story) {
+      // Check ownership
+      const isOwner = await checkStoryOwnership(req.params.id, req.userId);
+      if (!isOwner) {
         res.status(404).json({ error: 'Story not found' });
         return;
       }
 
       // Update fields
       const { name, prompt, nodes, worldSettings, style, versions } = req.body;
-      
-      if (name !== undefined) story.name = name;
-      if (prompt !== undefined) story.prompt = prompt;
-      if (nodes !== undefined) story.nodes = nodes;
-      if (worldSettings !== undefined) story.worldSettings = worldSettings;
-      if (style !== undefined) story.style = style;
-      if (versions !== undefined) story.versions = versions;
 
-      await story.save();
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (prompt !== undefined) updates.prompt = prompt;
+      if (nodes !== undefined) updates.nodes = nodes;
+      if (worldSettings !== undefined) updates.worldSettings = worldSettings;
+      if (style !== undefined) updates.style = style;
+      if (versions !== undefined) updates.versions = versions;
+
+      const story = await updateStory(req.params.id, updates);
 
       res.json({
         message: 'Story updated',
-        story: {
-          id: story._id,
-          name: story.name,
-          prompt: story.prompt,
-          nodes: story.nodes,
-          worldSettings: story.worldSettings,
-          style: story.style,
-          versions: story.versions,
-          createdAt: story.createdAt,
-          updatedAt: story.updatedAt,
-        },
+        story,
       });
     } catch (error) {
       console.error('Update story error:', error);
@@ -195,7 +173,7 @@ router.put(
 // DELETE /api/stories/:id - Delete a story
 router.delete(
   '/:id',
-  param('id').isMongoId().withMessage('Invalid story ID'),
+  param('id').isUUID().withMessage('Invalid story ID'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const errors = validationResult(req);
@@ -204,15 +182,19 @@ router.delete(
         return;
       }
 
-      const result = await Story.deleteOne({
-        _id: req.params.id,
-        userId: req.userId,
-      });
+      if (!req.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
 
-      if (result.deletedCount === 0) {
+      // Check ownership
+      const isOwner = await checkStoryOwnership(req.params.id, req.userId);
+      if (!isOwner) {
         res.status(404).json({ error: 'Story not found' });
         return;
       }
+
+      await deleteStory(req.params.id);
 
       res.json({ message: 'Story deleted' });
     } catch (error) {

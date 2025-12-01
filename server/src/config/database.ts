@@ -1,27 +1,52 @@
-import mongoose from 'mongoose';
+import { Pool, PoolConfig } from 'pg';
 
-export const connectDatabase = async (): Promise<void> => {
-  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/twaine';
-  
+let pool: Pool | null = null;
+
+export const connectDatabase = async (): Promise<Pool> => {
+  if (pool) {
+    return pool;
+  }
+
+  const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres@localhost/twaine';
+
+  const config: PoolConfig = {
+    connectionString: databaseUrl,
+    max: 20, // Maximum number of clients in the pool
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+
+  pool = new Pool(config);
+
+  // Test connection
   try {
-    await mongoose.connect(mongoUri);
-    console.log('✅ Connected to MongoDB');
-    
-    mongoose.connection.on('error', (err) => {
-      console.error('MongoDB connection error:', err);
+    const client = await pool.connect();
+    console.log('✅ Connected to PostgreSQL');
+    client.release();
+
+    // Handle errors
+    pool.on('error', (err) => {
+      console.error('Unexpected error on idle PostgreSQL client', err);
     });
-    
-    mongoose.connection.on('disconnected', () => {
-      console.warn('MongoDB disconnected. Attempting to reconnect...');
-    });
-    
+
+    return pool;
   } catch (error) {
-    console.error('❌ Failed to connect to MongoDB:', error);
-    process.exit(1);
+    console.error('❌ Failed to connect to PostgreSQL:', error);
+    throw error;
   }
 };
 
+export const getPool = (): Pool => {
+  if (!pool) {
+    throw new Error('Database pool not initialized. Call connectDatabase() first.');
+  }
+  return pool;
+};
+
 export const disconnectDatabase = async (): Promise<void> => {
-  await mongoose.disconnect();
-  console.log('Disconnected from MongoDB');
+  if (pool) {
+    await pool.end();
+    pool = null;
+    console.log('Disconnected from PostgreSQL');
+  }
 };

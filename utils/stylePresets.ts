@@ -239,6 +239,10 @@ export const LAYOUT_CONFIGS: Record<LayoutMode, { name: string; description: str
   manuscript: {
     name: 'Manuscript',
     description: 'Illuminated manuscript style with ornate borders'
+  },
+  'visual-novel': {
+    name: 'Visual Novel',
+    description: 'Full-screen backgrounds with character sprites and dialogue box'
   }
 };
 

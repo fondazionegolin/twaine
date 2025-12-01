@@ -1,0 +1,54 @@
+tunnel: da5e18b5-7dba-447b-b0ef-c00da100b52a
+credentials-file: /etc/cloudflared/da5e18b5-7dba-447b-b0ef-c00da100b52a.json
+
+ingress:
+  # Frontend
+  - hostname: golinelli.ai
+    service: http://127.0.0.1:1420
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      http2Origin: true
+
+  # Backend API
+  - hostname: api.golinelli.ai
+    service: http://127.0.0.1:8765
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+      keepAliveTimeout: 90s
+      http2Origin: true
+
+  # CloudFolder (drive)
+  - hostname: drive.golinelli.ai
+    service: http://127.0.0.1:8080
+    originRequest:
+      http2Origin: true
+      connectTimeout: 30s
+      noTLSVerify: true
+
+  # SSH
+  - hostname: ssh.golinelli.ai
+    service: ssh://localhost:22
+
+  # Image Generation API
+  - hostname: image.golinelli.ai
+    service: http://127.0.0.1:8005
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      tcpKeepAlive: 30s
+      keepAliveTimeout: 120s
+      http2Origin: true
+
+  # TWAINE - AI Interactive Fiction
+  - hostname: twaine.golinelli.ai
+    service: http://127.0.0.1:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      http2Origin: true
+
+  # Fallback
+  - service: http_status:404

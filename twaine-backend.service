@@ -1,0 +1,29 @@
+[Unit]
+Description=twAIne Backend Server
+After=network.target mongodb.service
+Wants=mongodb.service
+
+[Service]
+Type=simple
+User=ale
+Group=ale
+WorkingDirectory=/home/ale/GIT/twaine/server
+Environment="NODE_ENV=production"
+EnvironmentFile=/home/ale/GIT/twaine/.env.local
+ExecStartPre=/usr/bin/npm run build
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=twaine-backend
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ale/GIT/twaine
+
+[Install]
+WantedBy=multi-user.target

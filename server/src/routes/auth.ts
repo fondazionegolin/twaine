@@ -1,22 +1,16 @@
 import { Router, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import jwt from 'jsonwebtoken';
-import { User } from '../models/User.js';
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  updateLastLogin,
+  updatePassword,
+  comparePassword,
+} from '../repositories/userRepository.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
-
-// Generate JWT token
-const generateToken = (userId: string): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET not configured');
-  
-  return jwt.sign(
-    { userId },
-    secret,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
-};
 
 // POST /api/auth/register
 router.post(
@@ -38,29 +32,26 @@ router.post(
       const { email, password, displayName } = req.body;
 
       // Check if user exists
-      const existingUser = await User.findOne({ email });
+      const existingUser = await findUserByEmail(email);
       if (existingUser) {
         res.status(400).json({ error: 'Email already registered' });
         return;
       }
 
       // Create user
-      const user = new User({
+      const user = await createUser({
         email,
         password,
-        displayName: displayName || email.split('@')[0],
+        displayName,
       });
 
-      await user.save();
-
-      // Generate token
-      const token = generateToken(user._id.toString());
+      // Create session
+      req.session.userId = user.id;
 
       res.status(201).json({
         message: 'Registration successful',
-        token,
         user: {
-          id: user._id,
+          id: user.id,
           email: user.email,
           displayName: user.displayName,
         },
@@ -90,33 +81,31 @@ router.post(
       const { email, password } = req.body;
 
       // Find user with password
-      const user = await User.findOne({ email }).select('+password');
+      const user = await findUserByEmail(email);
       if (!user) {
         res.status(401).json({ error: 'Invalid credentials' });
         return;
       }
 
       // Check password
-      const isMatch = await user.comparePassword(password);
+      const isMatch = await comparePassword(password, user.password_hash);
       if (!isMatch) {
         res.status(401).json({ error: 'Invalid credentials' });
         return;
       }
 
       // Update last login
-      user.lastLoginAt = new Date();
-      await user.save();
+      await updateLastLogin(user.id);
 
-      // Generate token
-      const token = generateToken(user._id.toString());
+      // Create session
+      req.session.userId = user.id;
 
       res.json({
         message: 'Login successful',
-        token,
         user: {
-          id: user._id,
+          id: user.id,
           email: user.email,
-          displayName: user.displayName,
+          displayName: user.display_name,
         },
       });
     } catch (error) {
@@ -126,10 +115,29 @@ router.post(
   }
 );
 
+// POST /api/auth/logout
+router.post('/logout', (req: AuthRequest, res: Response): void => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+      res.status(500).json({ error: 'Logout failed' });
+      return;
+    }
+
+    res.clearCookie('connect.sid');
+    res.json({ message: 'Logout successful' });
+  });
+});
+
 // GET /api/auth/me - Get current user
 router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.userId);
+    if (!req.userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const user = await findUserById(req.userId);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
@@ -137,7 +145,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise
 
     res.json({
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         displayName: user.displayName,
         createdAt: user.createdAt,
@@ -146,22 +154,6 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response): Promise
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
-  }
-});
-
-// POST /api/auth/refresh - Refresh token
-router.post('/refresh', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.userId) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
-
-    const token = generateToken(req.userId);
-    res.json({ token });
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(500).json({ error: 'Failed to refresh token' });
   }
 });
 
@@ -183,20 +175,24 @@ router.put(
 
       const { currentPassword, newPassword } = req.body;
 
-      const user = await User.findById(req.userId).select('+password');
+      if (!req.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const user = await findUserByEmail(req.user!.email);
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
 
-      const isMatch = await user.comparePassword(currentPassword);
+      const isMatch = await comparePassword(currentPassword, user.password_hash);
       if (!isMatch) {
         res.status(401).json({ error: 'Current password is incorrect' });
         return;
       }
 
-      user.password = newPassword;
-      await user.save();
+      await updatePassword(req.userId, newPassword);
 
       res.json({ message: 'Password updated successfully' });
     } catch (error) {
