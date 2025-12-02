@@ -129,6 +129,22 @@ export interface StoryStyle {
   titleFontSize?: string;
   textFontSize?: string;
   customCss?: string;
+  // Visual Novel settings
+  vnBackgroundModel?: string;
+  vnBackgroundWidth?: number;
+  vnBackgroundHeight?: number;
+  vnCharacterModel?: string;
+  vnCharacterWidth?: number;
+  vnCharacterHeight?: number;
+}
+
+export interface CharacterReference {
+  id: string;
+  name: string;
+  description: string;
+  referenceImage: string;
+  model: string;
+  strength?: number;
 }
 
 export interface StoryVersion {
@@ -146,6 +162,7 @@ export interface Story {
   worldSettings: WorldSettings;
   style?: StoryStyle;
   versions: StoryVersion[];
+  characters?: CharacterReference[];
   createdAt: string;
   updatedAt: string;
 }
@@ -176,6 +193,7 @@ export const storiesAPI = {
     nodes?: StoryNode[];
     worldSettings?: WorldSettings;
     style?: StoryStyle;
+    characters?: CharacterReference[];
   }): Promise<Story> => {
     const response = await apiFetch<{ story: Story }>('/stories', {
       method: 'POST',
@@ -191,6 +209,7 @@ export const storiesAPI = {
     worldSettings: WorldSettings;
     style: StoryStyle;
     versions: StoryVersion[];
+    characters: CharacterReference[];
   }>): Promise<Story> => {
     const response = await apiFetch<{ story: Story }>(`/stories/${id}`, {
       method: 'PUT',

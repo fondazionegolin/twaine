@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { StoryNode, ViewMode, WorldSettings, SavedStory, StoryStyle, ChatMessage, StoryVersion, CharacterReference } from './types';
 import * as GeminiService from './services/geminiService';
 import * as DatabaseService from './services/databaseService';
+import { storiesAPI } from './services/apiService';
 import { getGoogleFontsUrl, getAllFonts } from './utils/stylePresets';
 import { detectLanguage } from './utils/languageDetection';
 import { Play, PenTool, Sparkles, Loader2, ArrowRight, BookOpen, PlusCircle, Trash2, Home, Save, Coins, Sword, Backpack, Palette, X, Code, History, LogOut, Settings, Menu } from 'lucide-react';
@@ -51,7 +52,7 @@ const executeInteraction = (code: string, gameState: any, log: (msg: string) => 
 
 
 const AppContent: React.FC = () => {
-    const { user, logout, isLoading: authLoading } = useAuth();
+    const { user, logout, isLoading: authLoading, isOnline } = useAuth();
 
     const [nodes, setNodes] = useState<StoryNode[]>([]); // Our internal StoryNode[]
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -128,26 +129,101 @@ const AppContent: React.FC = () => {
 
         const loadStories = async () => {
             try {
-                const loaded = await DatabaseService.loadUserStories(user.id);
-                setSavedStories(loaded);
+                if (isOnline) {
+                    // Load from remote API
+                    const remoteStories = await storiesAPI.getAll();
+                    // Convert API format to SavedStory format
+                    const stories: SavedStory[] = await Promise.all(
+                        remoteStories.map(async (s) => {
+                            const fullStory = await storiesAPI.getById(s.id);
+                            return {
+                                id: fullStory.id,
+                                userId: user.id,
+                                name: fullStory.name,
+                                masterPrompt: fullStory.prompt,
+                                nodes: fullStory.nodes as unknown as StoryNode[],
+                                worldSettings: fullStory.worldSettings as WorldSettings,
+                                createdAt: new Date(fullStory.createdAt).getTime(),
+                                style: fullStory.style as unknown as StoryStyle,
+                                characters: fullStory.characters as unknown as CharacterReference[],
+                                versions: fullStory.versions?.map(v => ({
+                                    ...v,
+                                    timestamp: new Date(v.timestamp).getTime(),
+                                    action: v.description || 'Version saved'
+                                })) as StoryVersion[]
+                            };
+                        })
+                    );
+                    setSavedStories(stories);
+                } else {
+                    // Fallback to local IndexedDB
+                    const loaded = await DatabaseService.loadUserStories(user.id);
+                    setSavedStories(loaded);
+                }
             } catch (err) {
                 console.error('Failed to load stories:', err);
+                // Fallback to local on error
+                try {
+                    const loaded = await DatabaseService.loadUserStories(user.id);
+                    setSavedStories(loaded);
+                } catch (localErr) {
+                    console.error('Local fallback also failed:', localErr);
+                }
             }
         };
 
         loadStories();
-    }, [user]);
+    }, [user, isOnline]);
 
     // Save stories to database whenever they change
     useEffect(() => {
         if (!user) return;
 
-        savedStories.forEach(story => {
-            DatabaseService.saveStory(story).catch(err => {
-                console.error('Failed to save story:', err);
-            });
-        });
-    }, [savedStories, user]);
+        const saveStories = async () => {
+            for (const story of savedStories) {
+                try {
+                    if (isOnline) {
+                        // Check if story exists on server
+                        try {
+                            await storiesAPI.getById(story.id);
+                            // Update existing story
+                            await storiesAPI.update(story.id, {
+                                name: story.name,
+                                prompt: story.masterPrompt,
+                                nodes: story.nodes as any,
+                                worldSettings: story.worldSettings as any,
+                                style: story.style as any,
+                                characters: story.characters as any,
+                                versions: story.versions?.map(v => ({
+                                    ...v,
+                                    timestamp: new Date(v.timestamp),
+                                    description: v.action
+                                })) as any
+                            });
+                        } catch {
+                            // Story doesn't exist, create it
+                            await storiesAPI.create({
+                                name: story.name,
+                                prompt: story.masterPrompt,
+                                nodes: story.nodes as any,
+                                worldSettings: story.worldSettings as any,
+                                style: story.style as any,
+                                characters: story.characters as any
+                            });
+                        }
+                    }
+                    // Always save locally as backup
+                    await DatabaseService.saveStory(story);
+                } catch (err) {
+                    console.error('Failed to save story:', err);
+                }
+            }
+        };
+
+        // Debounce saves to avoid too many API calls
+        const timeoutId = setTimeout(saveStories, 2000);
+        return () => clearTimeout(timeoutId);
+    }, [savedStories, user, isOnline]);
 
     // Auto-save story name when it changes
     useEffect(() => {
@@ -613,6 +689,9 @@ const AppContent: React.FC = () => {
 
     const deleteSelectedStory = async (storyId: string) => {
         try {
+            if (isOnline) {
+                await storiesAPI.delete(storyId);
+            }
             await DatabaseService.deleteStory(storyId);
             setSavedStories(prev => prev.filter(s => s.id !== storyId));
         } catch (err) {
