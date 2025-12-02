@@ -67,11 +67,26 @@ interface StoredUser extends User {
 
 // Simple hash function (for demo - in production use bcrypt on backend)
 const hashPassword = async (password: string): Promise<string> => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  // crypto.subtle is only available on HTTPS or localhost
+  if (crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } else {
+    // Fallback for HTTP (insecure - only for development/demo)
+    // Simple hash using string manipulation
+    let hash = 0;
+    for (let i = 0; i < password.length; i++) {
+      const char = password.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16).padStart(8, '0') + 
+           password.length.toString(16).padStart(4, '0') +
+           password.split('').reduce((a, c) => a + c.charCodeAt(0), 0).toString(16).padStart(8, '0');
+  }
 };
 
 export const registerUser = async (email: string, password: string): Promise<User> => {

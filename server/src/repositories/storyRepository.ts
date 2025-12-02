@@ -49,6 +49,15 @@ export interface StoryVersion {
     description?: string;
 }
 
+export interface CharacterReference {
+    id: string;
+    name: string;
+    description: string;
+    referenceImage: string;
+    model: string;
+    strength?: number;
+}
+
 export interface Story {
     id: string;
     userId: string;
@@ -58,6 +67,7 @@ export interface Story {
     worldSettings: WorldSettings;
     style?: StoryStyle;
     versions: StoryVersion[];
+    characters: CharacterReference[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -78,6 +88,7 @@ export interface StoryCreateData {
     nodes?: StoryNode[];
     worldSettings?: WorldSettings;
     style?: StoryStyle;
+    characters?: CharacterReference[];
 }
 
 /**
@@ -87,8 +98,8 @@ export const createStory = async (data: StoryCreateData): Promise<Story> => {
     const pool = getPool();
 
     const result = await pool.query(
-        `INSERT INTO stories (user_id, name, prompt, nodes, world_settings, style, versions)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO stories (user_id, name, prompt, nodes, world_settings, style, versions, characters)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
         [
             data.userId,
@@ -98,6 +109,7 @@ export const createStory = async (data: StoryCreateData): Promise<Story> => {
             JSON.stringify(data.worldSettings || { useInventory: false, useEconomy: false, useCombat: false }),
             JSON.stringify(data.style || {}),
             JSON.stringify([]),
+            JSON.stringify(data.characters || []),
         ]
     );
 
@@ -160,6 +172,7 @@ export const updateStory = async (
         worldSettings: WorldSettings;
         style: StoryStyle;
         versions: StoryVersion[];
+        characters: CharacterReference[];
     }>
 ): Promise<Story> => {
     const pool = getPool();
@@ -196,6 +209,11 @@ export const updateStory = async (
     if (updates.versions !== undefined) {
         fields.push(`versions = $${paramIndex++}`);
         values.push(JSON.stringify(updates.versions));
+    }
+
+    if (updates.characters !== undefined) {
+        fields.push(`characters = $${paramIndex++}`);
+        values.push(JSON.stringify(updates.characters));
     }
 
     if (fields.length === 0) {
@@ -258,6 +276,7 @@ function mapStoryFromDb(row: any): Story {
         worldSettings: row.world_settings || { useInventory: false, useEconomy: false, useCombat: false },
         style: row.style || {},
         versions: row.versions || [],
+        characters: row.characters || [],
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };

@@ -78,6 +78,7 @@ router.post(
     body('nodes').optional().isArray(),
     body('worldSettings').optional().isObject(),
     body('style').optional().isObject(),
+    body('characters').optional().isArray(),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -92,7 +93,7 @@ router.post(
         return;
       }
 
-      const { name, prompt, nodes, worldSettings, style } = req.body;
+      const { name, prompt, nodes, worldSettings, style, characters } = req.body;
 
       const story = await createStory({
         userId: req.userId,
@@ -101,6 +102,7 @@ router.post(
         nodes,
         worldSettings,
         style,
+        characters,
       });
 
       res.status(201).json({
@@ -125,6 +127,7 @@ router.put(
     body('worldSettings').optional().isObject(),
     body('style').optional().isObject(),
     body('versions').optional().isArray(),
+    body('characters').optional().isArray(),
   ],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -147,7 +150,7 @@ router.put(
       }
 
       // Update fields
-      const { name, prompt, nodes, worldSettings, style, versions } = req.body;
+      const { name, prompt, nodes, worldSettings, style, versions, characters } = req.body;
 
       const updates: any = {};
       if (name !== undefined) updates.name = name;
@@ -156,6 +159,7 @@ router.put(
       if (worldSettings !== undefined) updates.worldSettings = worldSettings;
       if (style !== undefined) updates.style = style;
       if (versions !== undefined) updates.versions = versions;
+      if (characters !== undefined) updates.characters = characters;
 
       const story = await updateStory(req.params.id, updates);
 

@@ -27,6 +27,7 @@ CREATE TABLE stories (
     world_settings JSONB DEFAULT '{}'::jsonb,
     style JSONB DEFAULT '{}'::jsonb,
     versions JSONB DEFAULT '[]'::jsonb,
+    characters JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
