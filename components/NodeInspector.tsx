@@ -4,7 +4,7 @@ import { Wand2, Image as ImageIcon, Terminal, Loader2, X, Film, Send, Code2, Use
 import * as GeminiService from '../services/geminiService';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { ImageGenerationControls, ImageQuality, ImageStyle, getStepsFromQuality, enhancePromptWithStyle, QUALITY_STEPS } from './ImageGenerationControls';
+import { ImageGenerationControls, ImageQuality, ImageStyle, ImageModel, getStepsForModel, enhancePromptWithStyle } from './ImageGenerationControls';
 
 interface NodeInspectorProps {
   node: StoryNode;
@@ -28,7 +28,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   const [localContent, setLocalContent] = useState(node.content);
   const [localMediaPrompt, setLocalMediaPrompt] = useState(node.mediaPrompt || "");
   const [localMediaType, setLocalMediaType] = useState<'image' | 'video'>(node.mediaType || 'image');
-  const [localImageModel, setLocalImageModel] = useState<'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl'>(node.imageModel || 'sd-turbo');
+  const [localImageModel, setLocalImageModel] = useState<ImageModel>(node.imageModel === 'sd-turbo' ? 'flux-schnell' : (node.imageModel as ImageModel) || 'flux-schnell');
   const [localImageWidth, setLocalImageWidth] = useState<number>(node.imageWidth || 512);
   const [localImageHeight, setLocalImageHeight] = useState<number>(node.imageHeight || 512);
   const [localImageSteps, setLocalImageSteps] = useState<number>(node.imageSteps || 1);
@@ -171,8 +171,8 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     // Enhance prompt with selected style
     const promptToUse = enhancePromptWithStyle(basePrompt, localImageStyle);
     
-    // Get steps from quality setting
-    const stepsToUse = getStepsFromQuality(localImageQuality);
+    // Get steps from quality setting based on model
+    const stepsToUse = getStepsForModel(localImageModel, localImageQuality);
 
     setGenState({ isGenerating: true, type: 'MEDIA', mediaType: localMediaType });
     
@@ -275,20 +275,21 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
     setGeneratingSpriteIndex(index);
     
-    // Get steps from quality setting
-    const stepsToUse = getStepsFromQuality(localImageQuality);
+    // Get model and steps from settings
+    const spriteModel = (currentStyle?.vnCharacterModel || localImageModel) as ImageModel;
+    const stepsToUse = getStepsForModel(spriteModel, localImageQuality);
     
     // Optimized prompt for VN sprite with style
     const basePrompt = `visual novel character sprite, full body portrait, ${description}, standing pose, facing viewer, simple clean lineart, cel shading, solid color background, white background, no background details, isolated character, game asset, transparent background ready`;
     const spritePrompt = enhancePromptWithStyle(basePrompt, localImageStyle);
 
-    setStatusMessage(`Generating ${localImageQuality} quality sprite...`);
+    setStatusMessage(`Generating ${localImageQuality} quality sprite (${stepsToUse} steps)...`);
 
     try {
       const uri = await GeminiService.generateNodeMedia(
         spritePrompt,
         'image',
-        currentStyle?.vnCharacterModel || 'sdxl', // Use VN character model from style
+        spriteModel, // Use VN character model from style or current model
         currentStyle?.vnCharacterWidth || 512,    // Width
         currentStyle?.vnCharacterHeight || 768,   // Height (taller for full body)
         stepsToUse,     // Steps from quality
@@ -322,10 +323,11 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
     setIsGeneratingVnBg(true);
     
-    // Get steps from quality setting
-    const stepsToUse = getStepsFromQuality(localImageQuality);
+    // Get model and steps from settings
+    const bgModel = (currentStyle?.vnBackgroundModel || localImageModel) as ImageModel;
+    const stepsToUse = getStepsForModel(bgModel, localImageQuality);
     
-    setStatusMessage(`Generating ${localImageQuality} quality background...`);
+    setStatusMessage(`Generating ${localImageQuality} quality background (${stepsToUse} steps)...`);
     
     // Optimized prompt for VN background with style
     const basePrompt = `visual novel background, ${vnBgPrompt}, detailed environment, atmospheric lighting, no characters, wide shot, game background asset`;
@@ -335,7 +337,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
       const uri = await GeminiService.generateNodeMedia(
         bgPrompt,
         'image',
-        currentStyle?.vnBackgroundModel || localImageModel,
+        bgModel,
         currentStyle?.vnBackgroundWidth || 1024,   // Width - wider for backgrounds
         currentStyle?.vnBackgroundHeight || 768,    // Height
         stepsToUse,
@@ -783,36 +785,21 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-purple-500 transition-colors"
             />
 
-            {/* Quality & Style Controls */}
+            {/* Model, Quality & Style Controls */}
             <div className="bg-neutral-800/30 rounded-lg p-3 border border-neutral-700/50">
               <ImageGenerationControls
+                model={localImageModel}
                 quality={localImageQuality}
                 style={localImageStyle}
+                onModelChange={setLocalImageModel}
                 onQualityChange={setLocalImageQuality}
                 onStyleChange={setLocalImageStyle}
               />
             </div>
 
-            {/* Model & Format Selection */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Model */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-neutral-500">Model</label>
-                <select
-                  value={localImageModel}
-                  onChange={(e) => setLocalImageModel(e.target.value as 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl')}
-                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-lg px-3 py-2.5 text-xs text-white outline-none focus:border-purple-500"
-                >
-                  <option value="sd-turbo">SD Turbo ⚡</option>
-                  <option value="flux-schnell">Flux Schnell</option>
-                  <option value="flux-dev">Flux Dev</option>
-                  <option value="sdxl">SDXL</option>
-                </select>
-              </div>
-
-              {/* Aspect Ratio */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-neutral-500">Format</label>
+            {/* Aspect Ratio */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-neutral-500">Format</label>
                 <div className="flex gap-1.5">
                   {[
                     { w: 512, h: 512, label: '1:1' },
@@ -832,7 +819,6 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                     </button>
                   ))}
                 </div>
-              </div>
             </div>
 
             {/* Character Reference for Consistency */}
@@ -1192,12 +1178,13 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                     Generate
                   </button>
                 </div>
-                {/* Compact Quality & Style for VN */}
-                <div className="flex items-center gap-2 text-xs text-neutral-500">
-                  <span>Quality & Style:</span>
+                {/* Compact Model, Quality & Style for VN */}
+                <div className="flex items-center gap-2 text-xs text-neutral-500 flex-wrap">
                   <ImageGenerationControls
+                    model={localImageModel}
                     quality={localImageQuality}
                     style={localImageStyle}
+                    onModelChange={setLocalImageModel}
                     onQualityChange={setLocalImageQuality}
                     onStyleChange={setLocalImageStyle}
                     compact={true}

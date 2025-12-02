@@ -9,7 +9,7 @@ import {
   getGoogleFontsUrl,
   getAllFonts
 } from '../utils/stylePresets';
-import { ImageGenerationControls, ImageQuality, ImageStyle, QUALITY_LABELS, STYLE_LABELS } from './ImageGenerationControls';
+import { ImageGenerationControls, ImageQuality, ImageStyle, ImageModel } from './ImageGenerationControls';
 
 interface StyleEditorProps {
   style?: StoryStyle;
@@ -563,8 +563,10 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
                   These settings apply to all image generation in the story.
                 </p>
                 <ImageGenerationControls
+                  model={(currentStyle.vnBackgroundModel as ImageModel) || 'flux-schnell'}
                   quality={(currentStyle.imageQuality as ImageQuality) || 'medium'}
                   style={(currentStyle.imageStyle as ImageStyle) || 'illustration'}
+                  onModelChange={(m) => updateStyle({ vnBackgroundModel: m, vnCharacterModel: m })}
                   onQualityChange={(q) => updateStyle({ imageQuality: q })}
                   onStyleChange={(s) => updateStyle({ imageStyle: s })}
                 />
@@ -585,10 +587,10 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
                       onChange={(e) => updateStyle({ vnBackgroundModel: e.target.value as StoryStyle['vnBackgroundModel'] })}
                       className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
                     >
-                      <option value="sd-turbo">SD Turbo ⚡ (Fast)</option>
-                      <option value="flux-schnell">Flux Schnell (Balanced)</option>
-                      <option value="flux-dev">Flux Dev (Quality)</option>
-                      <option value="sdxl">SDXL (High Quality)</option>
+                      <option value="flux-schnell">Flux Schnell ⚡</option>
+                      <option value="flux-dev">Flux Dev</option>
+                      <option value="flux-krea-dev">Flux Krea</option>
+                      <option value="sdxl">SDXL (Alta Qualità)</option>
                     </select>
                   </div>
 
@@ -632,10 +634,10 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
                       onChange={(e) => updateStyle({ vnCharacterModel: e.target.value as StoryStyle['vnCharacterModel'] })}
                       className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
                     >
-                      <option value="sd-turbo">SD Turbo ⚡ (Fast)</option>
-                      <option value="flux-schnell">Flux Schnell (Balanced)</option>
-                      <option value="flux-dev">Flux Dev (Quality)</option>
-                      <option value="sdxl">SDXL (High Quality)</option>
+                      <option value="flux-schnell">Flux Schnell ⚡</option>
+                      <option value="flux-dev">Flux Dev</option>
+                      <option value="flux-krea-dev">Flux Krea</option>
+                      <option value="sdxl">SDXL (Alta Qualità)</option>
                     </select>
                   </div>
 

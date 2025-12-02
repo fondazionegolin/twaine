@@ -1,21 +1,45 @@
 import React from 'react';
-import { Sparkles, Palette } from 'lucide-react';
+import { Sparkles, Palette, Cpu } from 'lucide-react';
 
 export type ImageQuality = 'low' | 'medium' | 'high' | 'ultra';
 export type ImageStyle = 'photo' | 'illustration' | 'manga' | 'comic' | 'anime' | 'watercolor' | 'oil-painting' | 'pixel-art';
+export type ImageModel = 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
 
-export const QUALITY_STEPS: Record<ImageQuality, number> = {
-  low: 4,
-  medium: 8,
-  high: 20,
-  ultra: 35,
+// Steps vary by model type
+export const getStepsForModel = (model: ImageModel, quality: ImageQuality): number => {
+  const isFlux = model.startsWith('flux');
+  
+  if (isFlux) {
+    // Flux models: fewer steps needed
+    switch (quality) {
+      case 'low': return 4;
+      case 'medium': return 6;
+      case 'high': return 10;
+      case 'ultra': return 15;
+    }
+  } else {
+    // SDXL: more steps needed
+    switch (quality) {
+      case 'low': return 10;
+      case 'medium': return 25;
+      case 'high': return 50;
+      case 'ultra': return 75;
+    }
+  }
+};
+
+export const MODEL_LABELS: Record<ImageModel, string> = {
+  'flux-schnell': 'Flux Schnell ⚡',
+  'flux-dev': 'Flux Dev',
+  'flux-krea-dev': 'Flux Krea',
+  'sdxl': 'SDXL (Alta Qualità)',
 };
 
 export const QUALITY_LABELS: Record<ImageQuality, string> = {
-  low: 'Bassa (veloce)',
+  low: 'Bassa',
   medium: 'Media',
   high: 'Alta',
-  ultra: 'Ultra (lento)',
+  ultra: 'Ultra',
 };
 
 export const STYLE_LABELS: Record<ImageStyle, string> = {
@@ -27,6 +51,17 @@ export const STYLE_LABELS: Record<ImageStyle, string> = {
   watercolor: 'Acquerello',
   'oil-painting': 'Pittura a olio',
   'pixel-art': 'Pixel Art',
+};
+
+export const STYLE_ICONS: Record<ImageStyle, string> = {
+  photo: '📷',
+  illustration: '🎨',
+  manga: '📖',
+  comic: '💥',
+  anime: '🌸',
+  watercolor: '💧',
+  'oil-painting': '🖼️',
+  'pixel-art': '👾',
 };
 
 export const STYLE_PROMPTS: Record<ImageStyle, string> = {
@@ -41,36 +76,58 @@ export const STYLE_PROMPTS: Record<ImageStyle, string> = {
 };
 
 interface ImageGenerationControlsProps {
+  model: ImageModel;
   quality: ImageQuality;
   style: ImageStyle;
+  onModelChange: (model: ImageModel) => void;
   onQualityChange: (quality: ImageQuality) => void;
   onStyleChange: (style: ImageStyle) => void;
   compact?: boolean;
   showLabels?: boolean;
+  showModel?: boolean;
 }
 
 export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = ({
+  model,
   quality,
   style,
+  onModelChange,
   onQualityChange,
   onStyleChange,
   compact = false,
   showLabels = true,
+  showModel = true,
 }) => {
+  const models: ImageModel[] = ['flux-schnell', 'flux-dev', 'flux-krea-dev', 'sdxl'];
   const qualities: ImageQuality[] = ['low', 'medium', 'high', 'ultra'];
   const styles: ImageStyle[] = ['photo', 'illustration', 'manga', 'comic', 'anime', 'watercolor', 'oil-painting', 'pixel-art'];
 
+  // Get current steps for display
+  const currentSteps = getStepsForModel(model, quality);
+
   if (compact) {
     return (
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
+        {showModel && (
+          <select
+            value={model}
+            onChange={(e) => onModelChange(e.target.value as ImageModel)}
+            className="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600"
+            title="Modello"
+          >
+            {models.map((m) => (
+              <option key={m} value={m}>{MODEL_LABELS[m]}</option>
+            ))}
+          </select>
+        )}
         <select
           value={quality}
           onChange={(e) => onQualityChange(e.target.value as ImageQuality)}
           className="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600"
-          title="Qualità immagine"
+          title={`Qualità (${currentSteps} steps)`}
         >
           {qualities.map((q) => (
-            <option key={q} value={q}>{QUALITY_LABELS[q]}</option>
+            <option key={q} value={q}>{QUALITY_LABELS[q]} ({getStepsForModel(model, q)})</option>
           ))}
         </select>
         <select
@@ -89,12 +146,39 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
 
   return (
     <div className="space-y-3">
+      {/* Model Selector */}
+      {showModel && (
+        <div>
+          {showLabels && (
+            <label className="flex items-center gap-1 text-xs text-gray-400 mb-1">
+              <Cpu size={12} />
+              Modello
+            </label>
+          )}
+          <div className="grid grid-cols-2 gap-1">
+            {models.map((m) => (
+              <button
+                key={m}
+                onClick={() => onModelChange(m)}
+                className={`px-2 py-1.5 text-xs rounded transition-colors ${
+                  model === m
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {MODEL_LABELS[m]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Quality Selector */}
       <div>
         {showLabels && (
           <label className="flex items-center gap-1 text-xs text-gray-400 mb-1">
             <Sparkles size={12} />
-            Qualità
+            Qualità ({currentSteps} steps)
           </label>
         )}
         <div className="flex gap-1">
@@ -107,16 +191,15 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
                   ? 'bg-purple-600 text-white'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
-              title={`${QUALITY_STEPS[q]} steps`}
+              title={`${getStepsForModel(model, q)} steps`}
             >
               {q === 'low' ? '🐇' : q === 'medium' ? '⚖️' : q === 'high' ? '✨' : '💎'}
-              <span className="ml-1 hidden sm:inline">{q.charAt(0).toUpperCase() + q.slice(1)}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Style Selector */}
+      {/* Style Selector - Dropdown */}
       <div>
         {showLabels && (
           <label className="flex items-center gap-1 text-xs text-gray-400 mb-1">
@@ -124,39 +207,25 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
             Stile
           </label>
         )}
-        <div className="grid grid-cols-4 gap-1">
+        <select
+          value={style}
+          onChange={(e) => onStyleChange(e.target.value as ImageStyle)}
+          className="w-full bg-gray-700 text-white text-sm rounded-lg px-3 py-2 border border-gray-600 outline-none focus:border-blue-500"
+        >
           {styles.map((s) => (
-            <button
-              key={s}
-              onClick={() => onStyleChange(s)}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                style === s
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-              title={STYLE_LABELS[s]}
-            >
-              {s === 'photo' ? '📷' : 
-               s === 'illustration' ? '🎨' : 
-               s === 'manga' ? '📖' : 
-               s === 'comic' ? '💥' : 
-               s === 'anime' ? '🌸' : 
-               s === 'watercolor' ? '💧' : 
-               s === 'oil-painting' ? '🖼️' : '👾'}
-            </button>
+            <option key={s} value={s}>
+              {STYLE_ICONS[s]} {STYLE_LABELS[s]}
+            </option>
           ))}
-        </div>
-        <div className="text-xs text-gray-500 mt-1 text-center">
-          {STYLE_LABELS[style]}
-        </div>
+        </select>
       </div>
     </div>
   );
 };
 
-// Helper function to get steps from quality
-export const getStepsFromQuality = (quality: ImageQuality): number => {
-  return QUALITY_STEPS[quality];
+// Helper function to get steps from quality (legacy - use getStepsForModel instead)
+export const getStepsFromQuality = (quality: ImageQuality, model: ImageModel = 'flux-schnell'): number => {
+  return getStepsForModel(model, quality);
 };
 
 // Helper function to enhance prompt with style

@@ -117,10 +117,10 @@ export interface StoryStyle {
   headerDecoration?: 'none' | 'simple' | 'flourish' | 'geometric';
   dividerStyle?: 'none' | 'line' | 'dots' | 'ornamental';
   // Visual Novel image generation settings
-  vnBackgroundModel?: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
+  vnBackgroundModel?: 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
   vnBackgroundWidth?: number;
   vnBackgroundHeight?: number;
-  vnCharacterModel?: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
+  vnCharacterModel?: 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
   vnCharacterWidth?: number;
   vnCharacterHeight?: number;
   // Global image generation settings
