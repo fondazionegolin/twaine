@@ -1178,18 +1178,15 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                     Generate
                   </button>
                 </div>
-                {/* Compact Model, Quality & Style for VN */}
-                <div className="flex items-center gap-2 text-xs text-neutral-500 flex-wrap">
-                  <ImageGenerationControls
-                    model={localImageModel}
-                    quality={localImageQuality}
-                    style={localImageStyle}
-                    onModelChange={setLocalImageModel}
-                    onQualityChange={setLocalImageQuality}
-                    onStyleChange={setLocalImageStyle}
-                    compact={true}
-                  />
-                </div>
+                {/* Model, Quality & Style for VN */}
+                <ImageGenerationControls
+                  model={localImageModel}
+                  quality={localImageQuality}
+                  style={localImageStyle}
+                  onModelChange={setLocalImageModel}
+                  onQualityChange={setLocalImageQuality}
+                  onStyleChange={setLocalImageStyle}
+                />
               </div>
             </div>
 

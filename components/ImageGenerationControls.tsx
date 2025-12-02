@@ -1,5 +1,4 @@
 import React from 'react';
-import { Sparkles, Palette, Cpu } from 'lucide-react';
 
 export type ImageQuality = 'low' | 'medium' | 'high' | 'ultra';
 export type ImageStyle = 'photo' | 'illustration' | 'manga' | 'comic' | 'anime' | 'watercolor' | 'oil-painting' | 'pixel-art';
@@ -82,9 +81,6 @@ interface ImageGenerationControlsProps {
   onModelChange: (model: ImageModel) => void;
   onQualityChange: (quality: ImageQuality) => void;
   onStyleChange: (style: ImageStyle) => void;
-  compact?: boolean;
-  showLabels?: boolean;
-  showModel?: boolean;
 }
 
 export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = ({
@@ -94,9 +90,6 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
   onModelChange,
   onQualityChange,
   onStyleChange,
-  compact = false,
-  showLabels = true,
-  showModel = true,
 }) => {
   const models: ImageModel[] = ['flux-schnell', 'flux-dev', 'flux-krea-dev', 'sdxl'];
   const qualities: ImageQuality[] = ['low', 'medium', 'high', 'ultra'];
@@ -105,120 +98,41 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
   // Get current steps for display
   const currentSteps = getStepsForModel(model, quality);
 
-  if (compact) {
-    return (
-      <div className="flex gap-2 flex-wrap">
-        {showModel && (
-          <select
-            value={model}
-            onChange={(e) => onModelChange(e.target.value as ImageModel)}
-            className="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600"
-            title="Modello"
-          >
-            {models.map((m) => (
-              <option key={m} value={m}>{MODEL_LABELS[m]}</option>
-            ))}
-          </select>
-        )}
+  // Always render the same compact 2-row layout with dropdowns only
+  return (
+    <div className="space-y-2">
+      {/* Row 1: Model + Quality */}
+      <div className="flex gap-2">
+        <select
+          value={model}
+          onChange={(e) => onModelChange(e.target.value as ImageModel)}
+          className="flex-1 bg-neutral-700 text-white text-xs rounded px-2 py-1.5 border border-neutral-600 outline-none"
+        >
+          {models.map((m) => (
+            <option key={m} value={m}>{MODEL_LABELS[m]}</option>
+          ))}
+        </select>
         <select
           value={quality}
           onChange={(e) => onQualityChange(e.target.value as ImageQuality)}
-          className="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600"
-          title={`Qualità (${currentSteps} steps)`}
+          className="flex-1 bg-neutral-700 text-white text-xs rounded px-2 py-1.5 border border-neutral-600 outline-none"
+          title={`${currentSteps} steps`}
         >
           {qualities.map((q) => (
             <option key={q} value={q}>{QUALITY_LABELS[q]} ({getStepsForModel(model, q)})</option>
           ))}
         </select>
-        <select
-          value={style}
-          onChange={(e) => onStyleChange(e.target.value as ImageStyle)}
-          className="bg-gray-700 text-white text-xs rounded px-2 py-1 border border-gray-600"
-          title="Stile immagine"
-        >
-          {styles.map((s) => (
-            <option key={s} value={s}>{STYLE_LABELS[s]}</option>
-          ))}
-        </select>
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {/* Model Selector */}
-      {showModel && (
-        <div>
-          {showLabels && (
-            <label className="flex items-center gap-1 text-xs text-gray-400 mb-1">
-              <Cpu size={12} />
-              Modello
-            </label>
-          )}
-          <div className="grid grid-cols-2 gap-1">
-            {models.map((m) => (
-              <button
-                key={m}
-                onClick={() => onModelChange(m)}
-                className={`px-2 py-1.5 text-xs rounded transition-colors ${
-                  model === m
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {MODEL_LABELS[m]}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Quality Selector */}
-      <div>
-        {showLabels && (
-          <label className="flex items-center gap-1 text-xs text-gray-400 mb-1">
-            <Sparkles size={12} />
-            Qualità ({currentSteps} steps)
-          </label>
-        )}
-        <div className="flex gap-1">
-          {qualities.map((q) => (
-            <button
-              key={q}
-              onClick={() => onQualityChange(q)}
-              className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
-                quality === q
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-              title={`${getStepsForModel(model, q)} steps`}
-            >
-              {q === 'low' ? '🐇' : q === 'medium' ? '⚖️' : q === 'high' ? '✨' : '💎'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Style Selector - Dropdown */}
-      <div>
-        {showLabels && (
-          <label className="flex items-center gap-1 text-xs text-gray-400 mb-1">
-            <Palette size={12} />
-            Stile
-          </label>
-        )}
-        <select
-          value={style}
-          onChange={(e) => onStyleChange(e.target.value as ImageStyle)}
-          className="w-full bg-gray-700 text-white text-sm rounded-lg px-3 py-2 border border-gray-600 outline-none focus:border-blue-500"
-        >
-          {styles.map((s) => (
-            <option key={s} value={s}>
-              {STYLE_ICONS[s]} {STYLE_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Row 2: Style */}
+      <select
+        value={style}
+        onChange={(e) => onStyleChange(e.target.value as ImageStyle)}
+        className="w-full bg-neutral-700 text-white text-xs rounded px-2 py-1.5 border border-neutral-600 outline-none"
+      >
+        {styles.map((s) => (
+          <option key={s} value={s}>{STYLE_LABELS[s]}</option>
+        ))}
+      </select>
     </div>
   );
 };
