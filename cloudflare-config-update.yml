@@ -44,10 +44,20 @@ ingress:
 
   # TWAINE - AI Interactive Fiction
   - hostname: twaine.golinelli.ai
-    service: http://127.0.0.1:3000
+    service: http://127.0.0.1:4173
     originRequest:
       noTLSVerify: true
       connectTimeout: 30s
+      http2Origin: true
+
+  # TWAINE Backend API
+  - hostname: twaine-api.golinelli.ai
+    service: http://127.0.0.1:3001
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+      keepAliveTimeout: 90s
       http2Origin: true
 
   # Fallback

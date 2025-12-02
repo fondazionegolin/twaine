@@ -4,6 +4,7 @@ import { Wand2, Image as ImageIcon, Terminal, Loader2, X, Film, Send, Code2, Use
 import * as GeminiService from '../services/geminiService';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
+import { ImageGenerationControls, ImageQuality, ImageStyle, getStepsFromQuality, enhancePromptWithStyle, QUALITY_STEPS } from './ImageGenerationControls';
 
 interface NodeInspectorProps {
   node: StoryNode;
@@ -70,6 +71,10 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   const [showCharacterManager, setShowCharacterManager] = useState(false);
   const [newCharacterName, setNewCharacterName] = useState("");
   const [newCharacterDesc, setNewCharacterDesc] = useState("");
+
+  // Image quality and style state (from global style or defaults)
+  const [localImageQuality, setLocalImageQuality] = useState<ImageQuality>(currentStyle?.imageQuality || 'medium');
+  const [localImageStyle, setLocalImageStyle] = useState<ImageStyle>(currentStyle?.imageStyle || 'illustration');
 
   // Resizable panel state
   const [panelWidth, setPanelWidth] = useState(720);
@@ -160,8 +165,14 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     }
 
     // Use scene description if available, otherwise use media prompt
-    const promptToUse = localImageSceneDesc || localMediaPrompt;
-    if (!promptToUse) return alert("Please enter an image prompt or generate a scene description first.");
+    const basePrompt = localImageSceneDesc || localMediaPrompt;
+    if (!basePrompt) return alert("Please enter an image prompt or generate a scene description first.");
+
+    // Enhance prompt with selected style
+    const promptToUse = enhancePromptWithStyle(basePrompt, localImageStyle);
+    
+    // Get steps from quality setting
+    const stepsToUse = getStepsFromQuality(localImageQuality);
 
     setGenState({ isGenerating: true, type: 'MEDIA', mediaType: localMediaType });
     
@@ -177,14 +188,14 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
       referenceImage = selectedCharacter.referenceImage;
       modelToUse = selectedCharacter.model; // Use the character's model for consistency
       img2imgStrength = selectedCharacter.strength || 0.7; // Use character's strength setting
-      setStatusMessage(`Generating with ${selectedCharacter.name} (strength: ${img2imgStrength})...`);
+      setStatusMessage(`Generating ${localImageQuality} quality with ${selectedCharacter.name}...`);
     } else if (node.uploadedImage && node.mediaUri) {
       // Fallback to uploaded image if available
       referenceImage = node.mediaUri;
       img2imgStrength = 0.75;
-      setStatusMessage("Generating image...");
+      setStatusMessage(`Generating ${localImageQuality} quality image...`);
     } else {
-      setStatusMessage("Generating image...");
+      setStatusMessage(`Generating ${localImageQuality} quality image...`);
     }
 
     try {
@@ -194,7 +205,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         modelToUse,
         localImageWidth,
         localImageHeight,
-        localImageSteps,
+        stepsToUse,
         (msg) => setStatusMessage(msg),
         referenceImage,
         img2imgStrength
@@ -264,17 +275,23 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
     setGeneratingSpriteIndex(index);
     
-    // Optimized prompt for VN sprite with transparent background style
-    const spritePrompt = `anime visual novel character sprite, full body portrait, ${description}, standing pose, facing viewer, simple clean lineart, cel shading, solid color background, white background, no background details, isolated character, high quality anime art style, game asset, transparent background ready`;
+    // Get steps from quality setting
+    const stepsToUse = getStepsFromQuality(localImageQuality);
+    
+    // Optimized prompt for VN sprite with style
+    const basePrompt = `visual novel character sprite, full body portrait, ${description}, standing pose, facing viewer, simple clean lineart, cel shading, solid color background, white background, no background details, isolated character, game asset, transparent background ready`;
+    const spritePrompt = enhancePromptWithStyle(basePrompt, localImageStyle);
+
+    setStatusMessage(`Generating ${localImageQuality} quality sprite...`);
 
     try {
       const uri = await GeminiService.generateNodeMedia(
         spritePrompt,
         'image',
-        'sdxl', // Use SDXL for better quality sprites
-        512,    // Width
-        768,    // Height (taller for full body)
-        20,     // Steps for quality
+        currentStyle?.vnCharacterModel || 'sdxl', // Use VN character model from style
+        currentStyle?.vnCharacterWidth || 512,    // Width
+        currentStyle?.vnCharacterHeight || 768,   // Height (taller for full body)
+        stepsToUse,     // Steps from quality
         (msg) => setStatusMessage(msg)
       );
 
@@ -304,19 +321,24 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     }
 
     setIsGeneratingVnBg(true);
-    setStatusMessage("Generating background...");
     
-    // Optimized prompt for VN background
-    const bgPrompt = `anime visual novel background, ${vnBgPrompt}, detailed environment, atmospheric lighting, no characters, wide shot, high quality anime art style, game background asset`;
+    // Get steps from quality setting
+    const stepsToUse = getStepsFromQuality(localImageQuality);
+    
+    setStatusMessage(`Generating ${localImageQuality} quality background...`);
+    
+    // Optimized prompt for VN background with style
+    const basePrompt = `visual novel background, ${vnBgPrompt}, detailed environment, atmospheric lighting, no characters, wide shot, game background asset`;
+    const bgPrompt = enhancePromptWithStyle(basePrompt, localImageStyle);
 
     try {
       const uri = await GeminiService.generateNodeMedia(
         bgPrompt,
         'image',
-        localImageModel,
-        1024,   // Width - wider for backgrounds
-        768,    // Height
-        localImageSteps > 1 ? localImageSteps : 20,
+        currentStyle?.vnBackgroundModel || localImageModel,
+        currentStyle?.vnBackgroundWidth || 1024,   // Width - wider for backgrounds
+        currentStyle?.vnBackgroundHeight || 768,    // Height
+        stepsToUse,
         (msg) => setStatusMessage(msg)
       );
 
@@ -761,6 +783,16 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               className="w-full bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-purple-500 transition-colors"
             />
 
+            {/* Quality & Style Controls */}
+            <div className="bg-neutral-800/30 rounded-lg p-3 border border-neutral-700/50">
+              <ImageGenerationControls
+                quality={localImageQuality}
+                style={localImageStyle}
+                onQualityChange={setLocalImageQuality}
+                onStyleChange={setLocalImageStyle}
+              />
+            </div>
+
             {/* Model & Format Selection */}
             <div className="grid grid-cols-2 gap-3">
               {/* Model */}
@@ -1141,23 +1173,36 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
               )}
               
               {/* AI Background Generator */}
-              <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={vnBgPrompt}
-                  onChange={(e) => setVnBgPrompt(e.target.value)}
-                  placeholder="AI prompt for background..."
-                  className="flex-1 bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-pink-500 transition-colors"
-                  onKeyDown={(e) => e.key === 'Enter' && generateVnBackground()}
-                />
-                <button
-                  onClick={generateVnBackground}
-                  disabled={isGeneratingVnBg}
-                  className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white text-xs font-medium px-3 py-2.5 rounded-lg transition-colors"
-                >
-                  {isGeneratingVnBg ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                  Generate
-                </button>
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={vnBgPrompt}
+                    onChange={(e) => setVnBgPrompt(e.target.value)}
+                    placeholder="AI prompt for background..."
+                    className="flex-1 bg-neutral-800/30 border border-neutral-700/50 rounded-lg px-4 py-2.5 text-sm text-neutral-300 outline-none focus:border-pink-500 transition-colors"
+                    onKeyDown={(e) => e.key === 'Enter' && generateVnBackground()}
+                  />
+                  <button
+                    onClick={generateVnBackground}
+                    disabled={isGeneratingVnBg}
+                    className="flex items-center gap-1.5 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white text-xs font-medium px-3 py-2.5 rounded-lg transition-colors"
+                  >
+                    {isGeneratingVnBg ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    Generate
+                  </button>
+                </div>
+                {/* Compact Quality & Style for VN */}
+                <div className="flex items-center gap-2 text-xs text-neutral-500">
+                  <span>Quality & Style:</span>
+                  <ImageGenerationControls
+                    quality={localImageQuality}
+                    style={localImageStyle}
+                    onQualityChange={setLocalImageQuality}
+                    onStyleChange={setLocalImageStyle}
+                    compact={true}
+                  />
+                </div>
               </div>
             </div>
 

@@ -123,6 +123,9 @@ export interface StoryStyle {
   vnCharacterModel?: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
   vnCharacterWidth?: number;
   vnCharacterHeight?: number;
+  // Global image generation settings
+  imageQuality?: 'low' | 'medium' | 'high' | 'ultra';
+  imageStyle?: 'photo' | 'illustration' | 'manga' | 'comic' | 'anime' | 'watercolor' | 'oil-painting' | 'pixel-art';
 }
 
 export interface StoryVersion {

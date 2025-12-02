@@ -9,6 +9,7 @@ import {
   getGoogleFontsUrl,
   getAllFonts
 } from '../utils/stylePresets';
+import { ImageGenerationControls, ImageQuality, ImageStyle, QUALITY_LABELS, STYLE_LABELS } from './ImageGenerationControls';
 
 interface StyleEditorProps {
   style?: StoryStyle;
@@ -551,6 +552,23 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
               <p className="text-sm text-neutral-400">
                 Configure default image generation settings for Visual Novel mode. These settings will be used when generating backgrounds and character sprites.
               </p>
+
+              {/* Global Quality & Style Settings */}
+              <div className="p-4 bg-gradient-to-br from-purple-900/30 to-indigo-900/30 rounded-xl space-y-4 border border-purple-500/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles size={18} className="text-purple-400" />
+                  <h4 className="font-semibold text-white">Default Quality & Style</h4>
+                </div>
+                <p className="text-xs text-neutral-400 mb-3">
+                  These settings apply to all image generation in the story.
+                </p>
+                <ImageGenerationControls
+                  quality={(currentStyle.imageQuality as ImageQuality) || 'medium'}
+                  style={(currentStyle.imageStyle as ImageStyle) || 'illustration'}
+                  onQualityChange={(q) => updateStyle({ imageQuality: q })}
+                  onStyleChange={(s) => updateStyle({ imageStyle: s })}
+                />
+              </div>
 
               {/* Background Settings */}
               <div className="p-4 bg-neutral-800 rounded-xl space-y-4">
