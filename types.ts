@@ -116,6 +116,13 @@ export interface StoryStyle {
   cornerOrnaments?: boolean;
   headerDecoration?: 'none' | 'simple' | 'flourish' | 'geometric';
   dividerStyle?: 'none' | 'line' | 'dots' | 'ornamental';
+  // Visual Novel image generation settings
+  vnBackgroundModel?: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
+  vnBackgroundWidth?: number;
+  vnBackgroundHeight?: number;
+  vnCharacterModel?: 'sd-turbo' | 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
+  vnCharacterWidth?: number;
+  vnCharacterHeight?: number;
 }
 
 export interface StoryVersion {

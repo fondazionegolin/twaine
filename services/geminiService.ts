@@ -372,7 +372,8 @@ export const generateNodeMedia = async (
   height: number = 512,
   _steps: number = 1, // Ignored - steps are now auto-optimized
   onStatusUpdate?: (msg: string) => void,
-  referenceImage?: string // Optional reference image for img2img
+  referenceImage?: string, // Optional reference image for img2img
+  img2imgStrength: number = 0.75 // How much to deviate from reference (0.0=identical, 1.0=ignore reference)
 ): Promise<string> => {
   return retryOperation(async () => {
     if (mediaType === 'image') {
@@ -414,7 +415,10 @@ export const generateNodeMedia = async (
           : referenceImage;
 
         requestBody.image = base64Data;
-        requestBody.strength = 0.7; // How much to modify the original image (0.0-1.0)
+        // Strength controls how much to deviate from reference
+        // Higher = more creative/different, Lower = more similar to reference
+        // For character consistency, 0.65-0.8 works well
+        requestBody.strength = img2imgStrength;
       }
 
       const response = await fetch(`${FLUX_API_URL}${endpoint}`, {

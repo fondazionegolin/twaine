@@ -170,15 +170,18 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     
     let referenceImage: string | undefined;
     let modelToUse = localImageModel;
+    let img2imgStrength = 0.75; // Default strength
     
     if (selectedCharacter?.referenceImage) {
       // Use character reference for img2img consistency
       referenceImage = selectedCharacter.referenceImage;
       modelToUse = selectedCharacter.model; // Use the character's model for consistency
-      setStatusMessage(`Generating with ${selectedCharacter.name} reference...`);
+      img2imgStrength = selectedCharacter.strength || 0.7; // Use character's strength setting
+      setStatusMessage(`Generating with ${selectedCharacter.name} (strength: ${img2imgStrength})...`);
     } else if (node.uploadedImage && node.mediaUri) {
       // Fallback to uploaded image if available
       referenceImage = node.mediaUri;
+      img2imgStrength = 0.75;
       setStatusMessage("Generating image...");
     } else {
       setStatusMessage("Generating image...");
@@ -193,7 +196,8 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
         localImageHeight,
         localImageSteps,
         (msg) => setStatusMessage(msg),
-        referenceImage
+        referenceImage,
+        img2imgStrength
       );
 
       onUpdate({
@@ -828,24 +832,49 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                 ))}
               </select>
 
-              {/* Selected Character Preview */}
-              {localCharacterId && characters.find(c => c.id === localCharacterId) && (
-                <div className="flex gap-2 items-center bg-indigo-900/20 border border-indigo-700/30 rounded-lg p-2">
-                  <img 
-                    src={characters.find(c => c.id === localCharacterId)?.referenceImage} 
-                    alt="Character ref" 
-                    className="w-12 h-12 object-cover rounded-lg"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-white truncate">
-                      {characters.find(c => c.id === localCharacterId)?.name}
+              {/* Selected Character Preview with Strength Control */}
+              {localCharacterId && characters.find(c => c.id === localCharacterId) && (() => {
+                const char = characters.find(c => c.id === localCharacterId)!;
+                return (
+                  <div className="bg-indigo-900/20 border border-indigo-700/30 rounded-lg p-3 space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <img 
+                        src={char.referenceImage} 
+                        alt="Character ref" 
+                        className="w-12 h-12 object-cover rounded-lg"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-white truncate">{char.name}</div>
+                        <div className="text-[10px] text-neutral-400">img2img with {char.model}</div>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-neutral-400">
-                      Using img2img for consistency
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-neutral-400">Variation</span>
+                        <span className="text-indigo-300">{Math.round((char.strength || 0.7) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.3"
+                        max="0.9"
+                        step="0.05"
+                        value={char.strength || 0.7}
+                        onChange={(e) => {
+                          const newStrength = parseFloat(e.target.value);
+                          onCharactersChange?.(characters.map(c => 
+                            c.id === char.id ? { ...c, strength: newStrength } : c
+                          ));
+                        }}
+                        className="w-full h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                      />
+                      <div className="flex justify-between text-[9px] text-neutral-500">
+                        <span>More similar</span>
+                        <span>More creative</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Character Manager */}
               {showCharacterManager && (
@@ -869,7 +898,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                   />
                   
                   <div className="text-[10px] text-neutral-500">
-                    To create a character, first generate or upload an image above, then click "Save as Character"
+                    Generate or upload an image above, then save it as a character reference.
                   </div>
                   
                   <button
@@ -883,7 +912,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
                         description: newCharacterDesc.trim(),
                         referenceImage: node.mediaUri,
                         model: localImageModel,
-                        strength: 0.5
+                        strength: 0.7 // Default: 70% creativity, 30% reference similarity
                       };
                       
                       onCharactersChange?.([...characters, newChar]);

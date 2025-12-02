@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Type, Palette, Layout, Layers, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Type, Palette, Layout, Layers, Sparkles, ChevronDown, ChevronRight, ImageIcon, User } from 'lucide-react';
 import { StoryStyle, FontCategory, LayoutMode, TextureType } from '../types';
 import { 
   FONT_PRESETS, 
@@ -25,7 +25,7 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
   onGenerateStyle,
   isGenerating = false
 }) => {
-  const [activeTab, setActiveTab] = useState<'fonts' | 'colors' | 'layout' | 'texture' | 'ai'>('fonts');
+  const [activeTab, setActiveTab] = useState<'fonts' | 'colors' | 'layout' | 'texture' | 'vn' | 'ai'>('fonts');
   const [expandedCategory, setExpandedCategory] = useState<FontCategory | null>('serif');
   const [aiPrompt, setAiPrompt] = useState('');
   const [loadedFonts, setLoadedFonts] = useState<Set<string>>(new Set());
@@ -90,6 +90,7 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
     { id: 'colors', label: 'Colors', icon: Palette },
     { id: 'layout', label: 'Layout', icon: Layout },
     { id: 'texture', label: 'Texture', icon: Layers },
+    { id: 'vn', label: 'Visual Novel', icon: ImageIcon },
     { id: 'ai', label: 'AI Generate', icon: Sparkles },
   ] as const;
 
@@ -541,6 +542,113 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Visual Novel Tab */}
+          {activeTab === 'vn' && (
+            <div className="space-y-6">
+              <p className="text-sm text-neutral-400">
+                Configure default image generation settings for Visual Novel mode. These settings will be used when generating backgrounds and character sprites.
+              </p>
+
+              {/* Background Settings */}
+              <div className="p-4 bg-neutral-800 rounded-xl space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <ImageIcon size={18} className="text-indigo-400" />
+                  <h4 className="font-semibold text-white">Background Generation</h4>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-neutral-300 mb-2 block">Model</label>
+                    <select
+                      value={currentStyle.vnBackgroundModel || 'flux-schnell'}
+                      onChange={(e) => updateStyle({ vnBackgroundModel: e.target.value as StoryStyle['vnBackgroundModel'] })}
+                      className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
+                    >
+                      <option value="sd-turbo">SD Turbo ⚡ (Fast)</option>
+                      <option value="flux-schnell">Flux Schnell (Balanced)</option>
+                      <option value="flux-dev">Flux Dev (Quality)</option>
+                      <option value="sdxl">SDXL (High Quality)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-neutral-300 mb-2 block">Format</label>
+                    <div className="flex gap-2">
+                      {[
+                        { w: 1024, h: 576, label: '16:9' },
+                        { w: 768, h: 512, label: '3:2' },
+                        { w: 512, h: 512, label: '1:1' },
+                      ].map(({ w, h, label }) => (
+                        <button
+                          key={label}
+                          onClick={() => updateStyle({ vnBackgroundWidth: w, vnBackgroundHeight: h })}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                            (currentStyle.vnBackgroundWidth || 1024) === w && (currentStyle.vnBackgroundHeight || 576) === h
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600 border border-neutral-600'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Character Settings */}
+              <div className="p-4 bg-neutral-800 rounded-xl space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <User size={18} className="text-pink-400" />
+                  <h4 className="font-semibold text-white">Character Sprite Generation</h4>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-neutral-300 mb-2 block">Model</label>
+                    <select
+                      value={currentStyle.vnCharacterModel || 'flux-dev'}
+                      onChange={(e) => updateStyle({ vnCharacterModel: e.target.value as StoryStyle['vnCharacterModel'] })}
+                      className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
+                    >
+                      <option value="sd-turbo">SD Turbo ⚡ (Fast)</option>
+                      <option value="flux-schnell">Flux Schnell (Balanced)</option>
+                      <option value="flux-dev">Flux Dev (Quality)</option>
+                      <option value="sdxl">SDXL (High Quality)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-neutral-300 mb-2 block">Format</label>
+                    <div className="flex gap-2">
+                      {[
+                        { w: 512, h: 768, label: '2:3' },
+                        { w: 512, h: 512, label: '1:1' },
+                        { w: 768, h: 512, label: '3:2' },
+                      ].map(({ w, h, label }) => (
+                        <button
+                          key={label}
+                          onClick={() => updateStyle({ vnCharacterWidth: w, vnCharacterHeight: h })}
+                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                            (currentStyle.vnCharacterWidth || 512) === w && (currentStyle.vnCharacterHeight || 768) === h
+                              ? 'bg-pink-600 text-white'
+                              : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600 border border-neutral-600'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-neutral-500">
+                  Tip: Use 2:3 portrait format for character sprites to fit the visual novel layout.
+                </p>
+              </div>
             </div>
           )}
 

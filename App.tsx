@@ -819,7 +819,17 @@ const AppContent: React.FC = () => {
                                 <>
                                     <div className="border-t border-neutral-800 my-3" />
                                     <button
-                                        onClick={() => { setShowStylePrompt(!showStylePrompt); setShowMobileSidebar(false); }}
+                                        onClick={() => { 
+                                            setShowStyleEditor(true);
+                                            setShowMobileSidebar(false);
+                                            // Initialize preview with current style
+                                            if (currentStyle) {
+                                                setPreviewBackground(currentStyle.background);
+                                                setPreviewTextColor(currentStyle.textColor);
+                                                setPreviewAccentColor(currentStyle.accentColor);
+                                                setPreviewFontFamily(currentStyle.fontFamily);
+                                            }
+                                        }}
                                         className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${currentStyle ? 'bg-purple-900/50 text-purple-300' : 'text-neutral-400 hover:text-white hover:bg-neutral-800/50'}`}
                                     >
                                         <Palette size={18} /> Style
@@ -879,59 +889,21 @@ const AppContent: React.FC = () => {
                             <>
                                 <div className="flex items-center gap-2 mr-2">
                                     <button
-                                        onClick={() => setShowStylePrompt(!showStylePrompt)}
+                                        onClick={() => {
+                                            setShowStyleEditor(true);
+                                            // Initialize preview with current style
+                                            if (currentStyle) {
+                                                setPreviewBackground(currentStyle.background);
+                                                setPreviewTextColor(currentStyle.textColor);
+                                                setPreviewAccentColor(currentStyle.accentColor);
+                                                setPreviewFontFamily(currentStyle.fontFamily);
+                                            }
+                                        }}
                                         className={`p-1.5 rounded flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider border transition-all ${currentStyle ? 'bg-purple-900 border-purple-600 text-purple-200' : 'bg-neutral-800 border-neutral-700 text-neutral-500'}`}
-                                        title="Generate Global Style"
+                                        title="Open Style Editor"
                                     >
                                         <Palette size={14} /> Style
                                     </button>
-
-                                {/* Style Prompt Popover */}
-                                {showStylePrompt && (
-                                    <div className="absolute top-16 left-20 z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl p-3 w-72 animate-in fade-in zoom-in duration-200">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-xs font-bold text-neutral-400 uppercase">Visual Style</span>
-                                            <button onClick={() => setShowStylePrompt(false)}><X size={14} className="text-neutral-500 hover:text-white" /></button>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input
-                                                autoFocus
-                                                type="text"
-                                                value={stylePrompt}
-                                                onChange={(e) => setStylePrompt(e.target.value)}
-                                                placeholder="e.g., 'Cyberpunk neon', 'Old parchment'"
-                                                className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-blue-500"
-                                                onKeyDown={(e) => {
-                                                    e.stopPropagation();
-                                                    if (e.key === 'Enter') handleStyleGeneration();
-                                                }}
-                                            />
-                                            <button
-                                                onClick={handleStyleGeneration}
-                                                disabled={isGeneratingStyle || !stylePrompt}
-                                                className="bg-purple-600 hover:bg-purple-500 text-white p-1.5 rounded disabled:opacity-50"
-                                            >
-                                                {isGeneratingStyle ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                                            </button>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                setShowStylePrompt(false);
-                                                setShowStyleEditor(true);
-                                                // Initialize preview with current style
-                                                if (currentStyle) {
-                                                    setPreviewBackground(currentStyle.background);
-                                                    setPreviewTextColor(currentStyle.textColor);
-                                                    setPreviewAccentColor(currentStyle.accentColor);
-                                                    setPreviewFontFamily(currentStyle.fontFamily);
-                                                }
-                                            }}
-                                            className="mt-2 w-full text-xs text-neutral-400 hover:text-white flex items-center justify-center gap-1 py-1"
-                                        >
-                                            <PenTool size={12} /> Visual Editor
-                                        </button>
-                                    </div>
-                                )}
                             </div>
 
                         </>
