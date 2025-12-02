@@ -2,7 +2,7 @@ import React from 'react';
 
 export type ImageQuality = 'low' | 'medium' | 'high' | 'ultra';
 export type ImageStyle = 'photo' | 'illustration' | 'manga' | 'comic' | 'anime' | 'watercolor' | 'oil-painting' | 'pixel-art';
-export type ImageModel = 'flux-schnell' | 'flux-dev' | 'flux-krea-dev' | 'sdxl';
+export type ImageModel = 'flux-schnell' | 'sdxl';
 
 // Steps vary by model type
 export const getStepsForModel = (model: ImageModel, quality: ImageQuality): number => {
@@ -29,8 +29,6 @@ export const getStepsForModel = (model: ImageModel, quality: ImageQuality): numb
 
 export const MODEL_LABELS: Record<ImageModel, string> = {
   'flux-schnell': 'Flux Schnell ⚡',
-  'flux-dev': 'Flux Dev',
-  'flux-krea-dev': 'Flux Krea',
   'sdxl': 'SDXL (Alta Qualità)',
 };
 
@@ -91,7 +89,7 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
   onQualityChange,
   onStyleChange,
 }) => {
-  const models: ImageModel[] = ['flux-schnell', 'flux-dev', 'flux-krea-dev', 'sdxl'];
+  const models: ImageModel[] = ['flux-schnell', 'sdxl'];
   const qualities: ImageQuality[] = ['low', 'medium', 'high', 'ultra'];
   const styles: ImageStyle[] = ['photo', 'illustration', 'manga', 'comic', 'anime', 'watercolor', 'oil-painting', 'pixel-art'];
 

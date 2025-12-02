@@ -28,7 +28,12 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   const [localContent, setLocalContent] = useState(node.content);
   const [localMediaPrompt, setLocalMediaPrompt] = useState(node.mediaPrompt || "");
   const [localMediaType, setLocalMediaType] = useState<'image' | 'video'>(node.mediaType || 'image');
-  const [localImageModel, setLocalImageModel] = useState<ImageModel>(node.imageModel === 'sd-turbo' ? 'flux-schnell' : (node.imageModel as ImageModel) || 'flux-schnell');
+  // Migrate old models to supported ones
+  const getValidModel = (m: string | undefined): ImageModel => {
+    if (m === 'sdxl') return 'sdxl';
+    return 'flux-schnell'; // Default for sd-turbo, flux-dev, flux-krea-dev, or undefined
+  };
+  const [localImageModel, setLocalImageModel] = useState<ImageModel>(getValidModel(node.imageModel));
   const [localImageWidth, setLocalImageWidth] = useState<number>(node.imageWidth || 512);
   const [localImageHeight, setLocalImageHeight] = useState<number>(node.imageHeight || 512);
   const [localImageSteps, setLocalImageSteps] = useState<number>(node.imageSteps || 1);

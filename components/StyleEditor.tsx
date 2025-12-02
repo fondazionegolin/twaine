@@ -588,8 +588,6 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
                       className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
                     >
                       <option value="flux-schnell">Flux Schnell ⚡</option>
-                      <option value="flux-dev">Flux Dev</option>
-                      <option value="flux-krea-dev">Flux Krea</option>
                       <option value="sdxl">SDXL (Alta Qualità)</option>
                     </select>
                   </div>
@@ -630,13 +628,11 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
                   <div>
                     <label className="text-sm text-neutral-300 mb-2 block">Model</label>
                     <select
-                      value={currentStyle.vnCharacterModel || 'flux-dev'}
+                      value={currentStyle.vnCharacterModel || 'sdxl'}
                       onChange={(e) => updateStyle({ vnCharacterModel: e.target.value as StoryStyle['vnCharacterModel'] })}
                       className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
                     >
                       <option value="flux-schnell">Flux Schnell ⚡</option>
-                      <option value="flux-dev">Flux Dev</option>
-                      <option value="flux-krea-dev">Flux Krea</option>
                       <option value="sdxl">SDXL (Alta Qualità)</option>
                     </select>
                   </div>
