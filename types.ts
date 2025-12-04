@@ -126,6 +126,9 @@ export interface StoryStyle {
   // Global image generation settings
   imageQuality?: 'low' | 'medium' | 'high' | 'ultra';
   imageStyle?: 'photo' | 'illustration' | 'manga' | 'comic' | 'anime' | 'watercolor' | 'oil-painting' | 'pixel-art';
+  // Visual Novel dialog settings
+  vnDialogPosition?: 'top' | 'bottom';
+  vnDialogStyle?: 'modern' | 'classic' | 'minimal';
 }
 
 export interface StoryVersion {

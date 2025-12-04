@@ -28,12 +28,15 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
   const [localContent, setLocalContent] = useState(node.content);
   const [localMediaPrompt, setLocalMediaPrompt] = useState(node.mediaPrompt || "");
   const [localMediaType, setLocalMediaType] = useState<'image' | 'video'>(node.mediaType || 'image');
-  // Migrate old models to supported ones
+  // Migrate old models to supported ones (flux-schnell or sdxl only)
   const getValidModel = (m: string | undefined): ImageModel => {
     if (m === 'sdxl') return 'sdxl';
     return 'flux-schnell'; // Default for sd-turbo, flux-dev, flux-krea-dev, or undefined
   };
   const [localImageModel, setLocalImageModel] = useState<ImageModel>(getValidModel(node.imageModel));
+  
+  // Always use localImageModel for generation - ignore style's model settings
+  // This ensures the dropdown selection is always respected
   const [localImageWidth, setLocalImageWidth] = useState<number>(node.imageWidth || 512);
   const [localImageHeight, setLocalImageHeight] = useState<number>(node.imageHeight || 512);
   const [localImageSteps, setLocalImageSteps] = useState<number>(node.imageSteps || 1);
@@ -185,15 +188,16 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
     const selectedCharacter = localCharacterId ? characters.find(c => c.id === localCharacterId) : undefined;
     
     let referenceImage: string | undefined;
-    let modelToUse = localImageModel;
+    // Always use localImageModel from dropdown - never override with character's old model
+    const modelToUse = localImageModel;
     let img2imgStrength = 0.75; // Default strength
     
     if (selectedCharacter?.referenceImage) {
       // Use character reference for img2img consistency
       referenceImage = selectedCharacter.referenceImage;
-      modelToUse = selectedCharacter.model; // Use the character's model for consistency
+      // Keep using localImageModel, not character's model (which might be outdated)
       img2imgStrength = selectedCharacter.strength || 0.7; // Use character's strength setting
-      setStatusMessage(`Generating ${localImageQuality} quality with ${selectedCharacter.name}...`);
+      setStatusMessage(`Generating ${localImageQuality} quality with ${selectedCharacter.name} using ${localImageModel} (${stepsToUse} steps)...`);
     } else if (node.uploadedImage && node.mediaUri) {
       // Fallback to uploaded image if available
       referenceImage = node.mediaUri;
@@ -280,21 +284,20 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
     setGeneratingSpriteIndex(index);
     
-    // Get model and steps from settings
-    const spriteModel = (currentStyle?.vnCharacterModel || localImageModel) as ImageModel;
-    const stepsToUse = getStepsForModel(spriteModel, localImageQuality);
+    // Always use localImageModel from dropdown - this ensures user selection is respected
+    const stepsToUse = getStepsForModel(localImageModel, localImageQuality);
     
     // Optimized prompt for VN sprite with style
     const basePrompt = `visual novel character sprite, full body portrait, ${description}, standing pose, facing viewer, simple clean lineart, cel shading, solid color background, white background, no background details, isolated character, game asset, transparent background ready`;
     const spritePrompt = enhancePromptWithStyle(basePrompt, localImageStyle);
 
-    setStatusMessage(`Generating ${localImageQuality} quality sprite (${stepsToUse} steps)...`);
+    setStatusMessage(`Generating ${localImageQuality} quality sprite with ${localImageModel} (${stepsToUse} steps)...`);
 
     try {
       const uri = await GeminiService.generateNodeMedia(
         spritePrompt,
         'image',
-        spriteModel, // Use VN character model from style or current model
+        localImageModel,  // Use dropdown selection, not style setting
         currentStyle?.vnCharacterWidth || 512,    // Width
         currentStyle?.vnCharacterHeight || 768,   // Height (taller for full body)
         stepsToUse,     // Steps from quality
@@ -328,11 +331,10 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
 
     setIsGeneratingVnBg(true);
     
-    // Get model and steps from settings
-    const bgModel = (currentStyle?.vnBackgroundModel || localImageModel) as ImageModel;
-    const stepsToUse = getStepsForModel(bgModel, localImageQuality);
+    // Always use localImageModel from dropdown - this ensures user selection is respected
+    const stepsToUse = getStepsForModel(localImageModel, localImageQuality);
     
-    setStatusMessage(`Generating ${localImageQuality} quality background (${stepsToUse} steps)...`);
+    setStatusMessage(`Generating ${localImageQuality} quality background with ${localImageModel} (${stepsToUse} steps)...`);
     
     // Optimized prompt for VN background with style
     const basePrompt = `visual novel background, ${vnBgPrompt}, detailed environment, atmospheric lighting, no characters, wide shot, game background asset`;
@@ -342,7 +344,7 @@ const NodeInspector: React.FC<NodeInspectorProps> = ({ node, worldSettings, stor
       const uri = await GeminiService.generateNodeMedia(
         bgPrompt,
         'image',
-        bgModel,
+        localImageModel,  // Use dropdown selection, not style setting
         currentStyle?.vnBackgroundWidth || 1024,   // Width - wider for backgrounds
         currentStyle?.vnBackgroundHeight || 768,    // Height
         stepsToUse,

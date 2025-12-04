@@ -6,7 +6,9 @@ export type ImageModel = 'flux-schnell' | 'sdxl';
 
 // Steps vary by model type
 export const getStepsForModel = (model: ImageModel, quality: ImageQuality): number => {
-  const isFlux = model.startsWith('flux');
+  // Ensure model is valid, default to flux-schnell
+  const safeModel = model === 'sdxl' ? 'sdxl' : 'flux-schnell';
+  const isFlux = safeModel.startsWith('flux');
   
   if (isFlux) {
     // Flux models: fewer steps needed
@@ -93,8 +95,11 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
   const qualities: ImageQuality[] = ['low', 'medium', 'high', 'ultra'];
   const styles: ImageStyle[] = ['photo', 'illustration', 'manga', 'comic', 'anime', 'watercolor', 'oil-painting', 'pixel-art'];
 
-  // Get current steps for display
-  const currentSteps = getStepsForModel(model, quality);
+  // Ensure model is valid (might be undefined or legacy value)
+  const safeModel: ImageModel = model === 'sdxl' ? 'sdxl' : 'flux-schnell';
+  
+  // Get current steps for display using safe model
+  const currentSteps = getStepsForModel(safeModel, quality);
 
   // Always render the same compact 2-row layout with dropdowns only
   return (
@@ -102,7 +107,7 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
       {/* Row 1: Model + Quality */}
       <div className="flex gap-2">
         <select
-          value={model}
+          value={safeModel}
           onChange={(e) => onModelChange(e.target.value as ImageModel)}
           className="flex-1 bg-neutral-700 text-white text-xs rounded px-2 py-1.5 border border-neutral-600 outline-none"
         >
@@ -117,7 +122,7 @@ export const ImageGenerationControls: React.FC<ImageGenerationControlsProps> = (
           title={`${currentSteps} steps`}
         >
           {qualities.map((q) => (
-            <option key={q} value={q}>{QUALITY_LABELS[q]} ({getStepsForModel(model, q)})</option>
+            <option key={q} value={q}>{QUALITY_LABELS[q]} ({getStepsForModel(safeModel, q)})</option>
           ))}
         </select>
       </div>

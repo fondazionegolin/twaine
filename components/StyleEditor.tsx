@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Type, Palette, Layout, Layers, Sparkles, ChevronDown, ChevronRight, ImageIcon, User } from 'lucide-react';
-import { StoryStyle, FontCategory, LayoutMode, TextureType } from '../types';
+import { X, BookOpen, Monitor, Gamepad2, ChevronDown, ChevronRight } from 'lucide-react';
+import { StoryStyle, FontCategory, LayoutMode } from '../types';
 import { 
   FONT_PRESETS, 
   FONT_CATEGORY_NAMES, 
-  TEXTURE_PATTERNS, 
-  LAYOUT_CONFIGS,
   getGoogleFontsUrl,
-  getAllFonts
+  getAllFonts,
+  ORNAMENTS
 } from '../utils/stylePresets';
-import { ImageGenerationControls, ImageQuality, ImageStyle, ImageModel } from './ImageGenerationControls';
 
 interface StyleEditorProps {
   style?: StoryStyle;
@@ -19,44 +17,120 @@ interface StyleEditorProps {
   isGenerating?: boolean;
 }
 
+// Sample data for preview
+interface PreviewChoice {
+  id: string;
+  text: string;
+}
+
+interface PreviewNode {
+  title: string;
+  content: string;
+  choices: PreviewChoice[];
+  mediaUri: string;
+}
+
+const SAMPLE_NODE: PreviewNode = {
+  title: 'Il Viaggio Inizia',
+  content: `La luna piena illuminava il sentiero attraverso la foresta antica. I rami degli alberi secolari si intrecciavano sopra di te, creando un arco naturale che sembrava condurti verso l'ignoto.
+
+Un fruscio tra le foglie attirò la tua attenzione. Qualcosa si muoveva nell'ombra, troppo grande per essere un semplice animale del bosco.
+
+"Chi va là?" chiamasti, la voce che tremava leggermente.`,
+  choices: [
+    { id: 'c1', text: 'Avanzare con cautela verso il rumore' },
+    { id: 'c2', text: 'Nasconderti dietro un albero' },
+    { id: 'c3', text: 'Chiamare di nuovo, più forte' }
+  ],
+  mediaUri: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&h=600&fit=crop'
+};
+
+const COLOR_PRESETS = {
+  backgrounds: [
+    { name: 'Nero', value: '#0a0a0f' },
+    { name: 'Antracite', value: '#1a1a2e' },
+    { name: 'Blu Notte', value: '#0f1729' },
+    { name: 'Verde Scuro', value: '#0f1f0f' },
+    { name: 'Bordeaux', value: '#1f0f0f' },
+    { name: 'Seppia', value: '#2a2015' },
+    { name: 'Pergamena', value: '#f5f0e6' },
+    { name: 'Crema', value: '#faf8f0' },
+  ],
+  text: [
+    { name: 'Bianco', value: '#ffffff' },
+    { name: 'Avorio', value: '#f5f5dc' },
+    { name: 'Grigio Chiaro', value: '#d0d0d0' },
+    { name: 'Seppia', value: '#8b7355' },
+    { name: 'Nero', value: '#1a1a1a' },
+    { name: 'Marrone', value: '#3d2914' },
+  ],
+  accent: [
+    { name: 'Oro', value: '#d4af37' },
+    { name: 'Rosso', value: '#e94560' },
+    { name: 'Blu', value: '#4a90d9' },
+    { name: 'Verde', value: '#4a9d4a' },
+    { name: 'Viola', value: '#9b59b6' },
+    { name: 'Arancio', value: '#e67e22' },
+  ],
+  page: [
+    { name: 'Pergamena', value: '#f5f0e6' },
+    { name: 'Crema', value: '#faf8f0' },
+    { name: 'Avorio', value: '#fffff0' },
+    { name: 'Beige', value: '#f5f5dc' },
+    { name: 'Grigio', value: '#e8e8e8' },
+    { name: 'Bianco', value: '#ffffff' },
+  ]
+};
+
 const StyleEditor: React.FC<StyleEditorProps> = ({
   style,
   onStyleChange,
   onClose,
-  onGenerateStyle,
-  isGenerating = false
 }) => {
-  const [activeTab, setActiveTab] = useState<'fonts' | 'colors' | 'layout' | 'texture' | 'vn' | 'ai'>('fonts');
   const [expandedCategory, setExpandedCategory] = useState<FontCategory | null>('serif');
-  const [aiPrompt, setAiPrompt] = useState('');
   const [loadedFonts, setLoadedFonts] = useState<Set<string>>(new Set());
+  const [showColorPicker, setShowColorPicker] = useState<string | null>(null);
+
+  // Generate 216 web-safe colors + grayscale
+  const allColors = React.useMemo(() => {
+    const colors: string[] = [];
+    const values = ['00', '33', '66', '99', 'cc', 'ff'];
+    for (const r of values) {
+      for (const g of values) {
+        for (const b of values) {
+          colors.push(`#${r}${g}${b}`);
+        }
+      }
+    }
+    for (let i = 0; i <= 255; i += 17) {
+      const hex = i.toString(16).padStart(2, '0');
+      const gray = `#${hex}${hex}${hex}`;
+      if (!colors.includes(gray)) colors.push(gray);
+    }
+    return colors;
+  }, []);
 
   // Default style values
   const currentStyle: StoryStyle = {
     background: style?.background || '#1a1a2e',
     textColor: style?.textColor || '#eaeaea',
     accentColor: style?.accentColor || '#e94560',
-    fontFamily: style?.fontFamily || 'Inter, sans-serif',
+    fontFamily: style?.fontFamily || 'Lora, serif',
     animationClass: style?.animationClass || 'fade-in',
-    fontCategory: style?.fontCategory || 'modern',
-    titleFontFamily: style?.titleFontFamily || style?.fontFamily || 'Inter, sans-serif',
+    titleFontFamily: style?.titleFontFamily || 'Playfair Display, serif',
     layoutMode: style?.layoutMode || 'standard',
-    textureType: style?.textureType || 'none',
-    textureOpacity: style?.textureOpacity || 0.3,
-    textureColor: style?.textureColor || '#d4c4a8',
     pageColor: style?.pageColor || '#f5f0e6',
     pageShadow: style?.pageShadow !== false,
-    pageEdgeColor: style?.pageEdgeColor || '#d4c4a8',
     ornamentStyle: style?.ornamentStyle || 'elegant',
     titleFontSize: style?.titleFontSize || '2rem',
     textFontSize: style?.textFontSize || '1.1rem',
+    vnDialogPosition: style?.vnDialogPosition || 'bottom',
+    vnDialogStyle: style?.vnDialogStyle || 'modern',
     ...style
   };
 
-  // Load Google Font when selected
   const loadFont = (fontFamily: string) => {
     if (loadedFonts.has(fontFamily)) return;
-    
     const url = getGoogleFontsUrl([fontFamily]);
     if (url) {
       const link = document.createElement('link');
@@ -67,7 +141,6 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
     }
   };
 
-  // Load current fonts on mount
   useEffect(() => {
     if (currentStyle.fontFamily) loadFont(currentStyle.fontFamily);
     if (currentStyle.titleFontFamily) loadFont(currentStyle.titleFontFamily);
@@ -86,701 +159,433 @@ const StyleEditor: React.FC<StyleEditorProps> = ({
     }
   };
 
-  const tabs = [
-    { id: 'fonts', label: 'Fonts', icon: Type },
-    { id: 'colors', label: 'Colors', icon: Palette },
-    { id: 'layout', label: 'Layout', icon: Layout },
-    { id: 'texture', label: 'Texture', icon: Layers },
-    { id: 'vn', label: 'Visual Novel', icon: ImageIcon },
-    { id: 'ai', label: 'AI Generate', icon: Sparkles },
-  ] as const;
+  const handleLayoutChange = (mode: LayoutMode) => {
+    updateStyle({ layoutMode: mode });
+  };
+
+  // Color Swatch Component with 256 color picker
+  const ColorSwatch = ({ colors, selected, onChange, pickerId }: { 
+    colors: { name: string; value: string }[]; 
+    selected: string; 
+    onChange: (value: string) => void;
+    pickerId: string;
+  }) => (
+    <div className="space-y-1">
+      <div className="flex flex-wrap gap-1">
+        {colors.map(c => (
+          <button
+            key={c.value}
+            onClick={() => onChange(c.value)}
+            className={`w-6 h-6 rounded border-2 transition-all ${
+              selected === c.value ? 'border-white scale-110 shadow-lg' : 'border-transparent hover:border-neutral-500'
+            }`}
+            style={{ background: c.value }}
+            title={c.name}
+          />
+        ))}
+        <button
+          onClick={() => setShowColorPicker(showColorPicker === pickerId ? null : pickerId)}
+          className={`w-6 h-6 rounded border-2 flex items-center justify-center text-xs ${
+            showColorPicker === pickerId ? 'border-indigo-500 bg-indigo-500/20' : 'border-neutral-600 bg-neutral-700'
+          }`}
+          title="Palette completa"
+        >
+          <span className="text-neutral-300">+</span>
+        </button>
+        <div 
+          className="w-6 h-6 rounded border-2 border-white/50"
+          style={{ background: selected }}
+          title={`Attuale: ${selected}`}
+        />
+      </div>
+      {showColorPicker === pickerId && (
+        <div className="mt-2 p-2 bg-neutral-800 rounded-lg border border-neutral-600">
+          <div className="grid gap-0.5" style={{ gridTemplateColumns: 'repeat(18, 1fr)' }}>
+            {allColors.map((color, i) => (
+              <button
+                key={i}
+                onClick={() => { onChange(color); setShowColorPicker(null); }}
+                className={`w-4 h-4 rounded-sm transition-transform hover:scale-150 hover:z-10 ${
+                  selected === color ? 'ring-2 ring-white' : ''
+                }`}
+                style={{ background: color }}
+                title={color}
+              />
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="color"
+              value={selected.startsWith('#') ? selected : '#000000'}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-8 h-6 rounded cursor-pointer"
+            />
+            <input
+              type="text"
+              value={selected}
+              onChange={(e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) onChange(e.target.value); }}
+              className="flex-1 bg-neutral-700 border border-neutral-600 rounded px-2 py-1 text-xs text-white font-mono"
+              placeholder="#000000"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Standard Page Preview
+  const StandardPreview = () => (
+    <div 
+      className="rounded-lg overflow-hidden shadow-2xl h-full flex flex-col"
+      style={{ background: currentStyle.background }}
+    >
+      {SAMPLE_NODE.mediaUri && (
+        <div className="relative h-32 flex-shrink-0">
+          <img src={SAMPLE_NODE.mediaUri} alt="Scene" className="w-full h-full object-cover" />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 50%, ${currentStyle.background} 100%)` }} />
+        </div>
+      )}
+      <div className="flex-1 p-4 overflow-y-auto">
+        <h2 className="mb-3" style={{ fontFamily: currentStyle.titleFontFamily, fontSize: currentStyle.titleFontSize, color: currentStyle.textColor }}>
+          {SAMPLE_NODE.title}
+        </h2>
+        <div className="leading-relaxed whitespace-pre-line mb-4 text-sm" style={{ fontFamily: currentStyle.fontFamily, fontSize: currentStyle.textFontSize, color: currentStyle.textColor }}>
+          {SAMPLE_NODE.content}
+        </div>
+        <div className="space-y-2">
+          {SAMPLE_NODE.choices.map((choice, i) => (
+            <button
+              key={choice.id}
+              className="w-full text-left p-2 rounded-lg border transition-all text-sm"
+              style={{ 
+                borderColor: currentStyle.accentColor,
+                color: currentStyle.textColor,
+                fontFamily: currentStyle.fontFamily
+              }}
+            >
+              <span style={{ color: currentStyle.accentColor }}>{i + 1}.</span> {choice.text}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Book Preview
+  const BookPreview = () => {
+    const ornament = ORNAMENTS[currentStyle.ornamentStyle || 'elegant'];
+    return (
+      <div className="h-full flex items-center justify-center p-2" style={{ background: currentStyle.background }}>
+        <div className="flex shadow-2xl" style={{ transform: 'perspective(1000px) rotateY(-5deg)' }}>
+          {/* Left page */}
+          <div 
+            className="w-36 h-48 p-3 relative"
+            style={{ 
+              background: currentStyle.pageColor,
+              boxShadow: currentStyle.pageShadow ? 'inset -10px 0 20px rgba(0,0,0,0.1)' : 'none'
+            }}
+          >
+            {ornament && <div className="absolute top-1 left-1 right-1 h-4 opacity-30" dangerouslySetInnerHTML={{ __html: ornament }} />}
+            <img src={SAMPLE_NODE.mediaUri} alt="" className="w-full h-20 object-cover rounded mt-4" />
+            {ornament && <div className="absolute bottom-1 left-1 right-1 h-4 opacity-30 rotate-180" dangerouslySetInnerHTML={{ __html: ornament }} />}
+          </div>
+          {/* Spine */}
+          <div className="w-2 bg-gradient-to-r from-amber-900 to-amber-800" />
+          {/* Right page */}
+          <div 
+            className="w-36 h-48 p-3 relative"
+            style={{ 
+              background: currentStyle.pageColor,
+              boxShadow: currentStyle.pageShadow ? 'inset 10px 0 20px rgba(0,0,0,0.1)' : 'none'
+            }}
+          >
+            <h3 className="text-xs font-bold mb-1" style={{ fontFamily: currentStyle.titleFontFamily, color: '#2a2015' }}>
+              {SAMPLE_NODE.title}
+            </h3>
+            <p className="text-[8px] leading-tight" style={{ fontFamily: currentStyle.fontFamily, color: '#3d2914' }}>
+              {SAMPLE_NODE.content.substring(0, 200)}...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Visual Novel Preview
+  const VisualNovelPreview = () => {
+    const dialogPosition = currentStyle.vnDialogPosition || 'bottom';
+    const dialogStyle = currentStyle.vnDialogStyle || 'modern';
+    
+    const dialogStyles = {
+      modern: 'bg-black/80 backdrop-blur-sm border-t border-white/20',
+      classic: 'bg-gradient-to-b from-neutral-900/95 to-black/95 border-2 border-amber-600/50',
+      minimal: 'bg-black/60'
+    };
+
+    return (
+      <div className="h-full relative rounded-lg overflow-hidden">
+        <img src={SAMPLE_NODE.mediaUri} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+        
+        <div className={`absolute left-0 right-0 p-3 ${dialogPosition === 'top' ? 'top-0' : 'bottom-0'} ${dialogStyles[dialogStyle]}`}>
+          <div className="text-xs font-bold mb-1" style={{ color: currentStyle.accentColor }}>
+            Narratore
+          </div>
+          <p className="text-xs leading-relaxed text-white" style={{ fontFamily: currentStyle.fontFamily }}>
+            {SAMPLE_NODE.content.substring(0, 150)}...
+          </p>
+          <div className="mt-2 space-y-1">
+            {SAMPLE_NODE.choices.slice(0, 2).map((choice) => (
+              <div key={choice.id} className="text-[10px] py-1 px-2 bg-white/10 rounded text-white/90">
+                → {choice.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render controls based on layout type
+  const renderLayoutControls = () => {
+    const commonControls = (
+      <>
+        {/* Colors */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Colori</h4>
+          <div>
+            <label className="text-xs text-neutral-400 mb-1 block">Sfondo</label>
+            <ColorSwatch colors={COLOR_PRESETS.backgrounds} selected={currentStyle.background} onChange={(v) => updateStyle({ background: v })} pickerId="bg" />
+          </div>
+          <div>
+            <label className="text-xs text-neutral-400 mb-1 block">Testo</label>
+            <ColorSwatch colors={COLOR_PRESETS.text} selected={currentStyle.textColor} onChange={(v) => updateStyle({ textColor: v })} pickerId="text" />
+          </div>
+          <div>
+            <label className="text-xs text-neutral-400 mb-1 block">Accento</label>
+            <ColorSwatch colors={COLOR_PRESETS.accent} selected={currentStyle.accentColor} onChange={(v) => updateStyle({ accentColor: v })} pickerId="accent" />
+          </div>
+        </div>
+
+        {/* Font Testo */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Font Testo</h4>
+          <div className="space-y-1.5 max-h-24 overflow-y-auto">
+            {(Object.keys(FONT_PRESETS) as FontCategory[]).map(category => (
+              <div key={category} className="border border-neutral-700 rounded overflow-hidden">
+                <button
+                  onClick={() => setExpandedCategory(expandedCategory === category ? null : category)}
+                  className="w-full flex items-center justify-between p-2 bg-neutral-800 hover:bg-neutral-750 transition-colors text-xs"
+                >
+                  <span className="font-medium text-neutral-200">{FONT_CATEGORY_NAMES[category]}</span>
+                  {expandedCategory === category ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                </button>
+                {expandedCategory === category && (
+                  <div className="p-1.5 grid grid-cols-2 gap-1 bg-neutral-850">
+                    {FONT_PRESETS[category].map(font => {
+                      loadFont(font.family);
+                      return (
+                        <button
+                          key={font.name}
+                          onClick={() => handleFontSelect(font.family)}
+                          className={`p-1.5 rounded text-left transition-all text-xs ${
+                            currentStyle.fontFamily === font.family ? 'bg-indigo-600 text-white' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                          }`}
+                        >
+                          <span style={{ fontFamily: font.family }}>{font.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="text-xs text-neutral-400 mb-1 block">Dimensione</label>
+            <select value={currentStyle.textFontSize} onChange={(e) => updateStyle({ textFontSize: e.target.value })}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded p-1.5 text-white text-xs">
+              <option value="0.9rem">Piccolo</option>
+              <option value="1rem">Medio</option>
+              <option value="1.1rem">Grande</option>
+              <option value="1.25rem">Molto Grande</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Font Titoli */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Font Titoli</h4>
+          <div className="flex items-center gap-2 mb-1">
+            <input 
+              type="checkbox" 
+              id="sameFont" 
+              checked={currentStyle.titleFontFamily === currentStyle.fontFamily}
+              onChange={(e) => { if (e.target.checked) updateStyle({ titleFontFamily: currentStyle.fontFamily }); }}
+              className="rounded border-neutral-600 w-3.5 h-3.5" 
+            />
+            <label htmlFor="sameFont" className="text-xs text-neutral-400">Stesso del testo</label>
+          </div>
+          {currentStyle.titleFontFamily !== currentStyle.fontFamily && (
+            <select 
+              value={currentStyle.titleFontFamily} 
+              onChange={(e) => handleFontSelect(e.target.value, true)}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded p-1.5 text-white text-xs"
+            >
+              {getAllFonts().map(font => {
+                loadFont(font.family);
+                return <option key={font.family} value={font.family}>{font.name}</option>;
+              })}
+            </select>
+          )}
+          <div>
+            <label className="text-xs text-neutral-400 mb-1 block">Dimensione</label>
+            <select value={currentStyle.titleFontSize} onChange={(e) => updateStyle({ titleFontSize: e.target.value })}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded p-1.5 text-white text-xs">
+              <option value="1.5rem">Piccolo</option>
+              <option value="2rem">Medio</option>
+              <option value="2.5rem">Grande</option>
+              <option value="3rem">Molto Grande</option>
+            </select>
+          </div>
+        </div>
+      </>
+    );
+
+    if (currentStyle.layoutMode === 'book') {
+      return (
+        <>
+          {commonControls}
+          <div className="space-y-3 pt-2 border-t border-neutral-700">
+            <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Opzioni Libro</h4>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">Colore Pagina</label>
+              <ColorSwatch colors={COLOR_PRESETS.page} selected={currentStyle.pageColor || '#f5f0e6'} onChange={(v) => updateStyle({ pageColor: v })} pickerId="page" />
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="pageShadow" checked={currentStyle.pageShadow}
+                onChange={(e) => updateStyle({ pageShadow: e.target.checked })} className="rounded border-neutral-600 w-3.5 h-3.5" />
+              <label htmlFor="pageShadow" className="text-xs text-neutral-400">Ombre 3D</label>
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">Ornamenti</label>
+              <select value={currentStyle.ornamentStyle} onChange={(e) => updateStyle({ ornamentStyle: e.target.value as StoryStyle['ornamentStyle'] })}
+                className="w-full bg-neutral-700 border border-neutral-600 rounded p-1.5 text-white text-xs">
+                <option value="none">Nessuno</option>
+                <option value="simple">Semplice</option>
+                <option value="elegant">Elegante</option>
+                <option value="medieval">Medievale</option>
+                <option value="art-nouveau">Art Nouveau</option>
+              </select>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (currentStyle.layoutMode === 'visual-novel') {
+      return (
+        <>
+          {commonControls}
+          <div className="space-y-3 pt-2 border-t border-neutral-700">
+            <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wide">Opzioni Visual Novel</h4>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">Posizione Dialogo</label>
+              <select value={currentStyle.vnDialogPosition || 'bottom'} onChange={(e) => updateStyle({ vnDialogPosition: e.target.value as 'top' | 'bottom' })}
+                className="w-full bg-neutral-700 border border-neutral-600 rounded p-1.5 text-white text-xs">
+                <option value="bottom">In basso</option>
+                <option value="top">In alto</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1 block">Stile Dialogo</label>
+              <select value={currentStyle.vnDialogStyle || 'modern'} onChange={(e) => updateStyle({ vnDialogStyle: e.target.value as 'modern' | 'classic' | 'minimal' })}
+                className="w-full bg-neutral-700 border border-neutral-600 rounded p-1.5 text-white text-xs">
+                <option value="modern">Moderno</option>
+                <option value="classic">Classico</option>
+                <option value="minimal">Minimale</option>
+              </select>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    return commonControls;
+  };
+
+  const renderPreview = () => {
+    switch (currentStyle.layoutMode) {
+      case 'book':
+        return <BookPreview />;
+      case 'visual-novel':
+        return <VisualNovelPreview />;
+      default:
+        return <StandardPreview />;
+    }
+  };
+
+  const layoutTabs: { mode: LayoutMode; label: string; icon: React.ReactNode }[] = [
+    { mode: 'standard', label: 'Pagina Intera', icon: <Monitor size={16} /> },
+    { mode: 'book', label: 'Libro', icon: <BookOpen size={16} /> },
+    { mode: 'visual-novel', label: 'Visual Novel', icon: <Gamepad2 size={16} /> },
+  ];
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-neutral-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-neutral-700 shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-neutral-800">
-          <h2 className="text-xl font-bold text-white">Style Editor</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-neutral-800 rounded-lg transition-colors text-neutral-400 hover:text-white"
-          >
+      <div className="bg-neutral-900 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden border border-neutral-700 shadow-2xl flex flex-col">
+        {/* Header with Layout Tabs */}
+        <div className="flex items-center justify-between p-4 border-b border-neutral-700">
+          <div className="flex items-center gap-1">
+            {layoutTabs.map(tab => (
+              <button
+                key={tab.mode}
+                onClick={() => handleLayoutChange(tab.mode)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium ${
+                  currentStyle.layoutMode === tab.mode
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-lg transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-neutral-800 px-4">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-indigo-500 text-white'
-                  : 'border-transparent text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              <tab.icon size={16} />
-              {tab.label}
-            </button>
-          ))}
+        {/* Content: Controls + Preview */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Controls Panel */}
+          <div className="w-80 border-r border-neutral-700 p-4 overflow-y-auto space-y-4">
+            {renderLayoutControls()}
+          </div>
+
+          {/* Preview Panel */}
+          <div className="flex-1 p-4 bg-neutral-950 overflow-hidden">
+            <div className="h-full">
+              {renderPreview()}
+            </div>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Fonts Tab */}
-          {activeTab === 'fonts' && (
-            <div className="space-y-6">
-              {/* Body Font Selection */}
-              <div>
-                <h3 className="text-sm font-semibold text-neutral-300 mb-3">Body Font</h3>
-                <div className="space-y-2">
-                  {(Object.keys(FONT_PRESETS) as FontCategory[]).map(category => (
-                    <div key={category} className="border border-neutral-700 rounded-lg overflow-hidden">
-                      <button
-                        onClick={() => setExpandedCategory(expandedCategory === category ? null : category)}
-                        className="w-full flex items-center justify-between p-3 bg-neutral-800 hover:bg-neutral-750 transition-colors"
-                      >
-                        <span className="font-medium text-neutral-200">{FONT_CATEGORY_NAMES[category]}</span>
-                        {expandedCategory === category ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      </button>
-                      
-                      {expandedCategory === category && (
-                        <div className="p-3 grid grid-cols-2 gap-2 bg-neutral-850">
-                          {FONT_PRESETS[category].map(font => {
-                            // Load font for preview
-                            loadFont(font.family);
-                            return (
-                              <button
-                                key={font.name}
-                                onClick={() => handleFontSelect(font.family)}
-                                className={`p-3 rounded-lg text-left transition-all ${
-                                  currentStyle.fontFamily === font.family
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
-                                }`}
-                              >
-                                <span 
-                                  className="block text-lg mb-1"
-                                  style={{ fontFamily: font.family }}
-                                >
-                                  {font.name}
-                                </span>
-                                <span 
-                                  className="text-xs opacity-60"
-                                  style={{ fontFamily: font.family }}
-                                >
-                                  The quick brown fox jumps...
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Title Font Selection */}
-              <div>
-                <h3 className="text-sm font-semibold text-neutral-300 mb-3">Title Font</h3>
-                <div className="flex items-center gap-2 mb-3">
-                  <input
-                    type="checkbox"
-                    id="sameAsBody"
-                    checked={currentStyle.titleFontFamily === currentStyle.fontFamily}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        updateStyle({ titleFontFamily: currentStyle.fontFamily });
-                      }
-                    }}
-                    className="rounded border-neutral-600"
-                  />
-                  <label htmlFor="sameAsBody" className="text-sm text-neutral-400">
-                    Same as body font
-                  </label>
-                </div>
-                
-                {currentStyle.titleFontFamily !== currentStyle.fontFamily && (
-                  <select
-                    value={currentStyle.titleFontFamily}
-                    onChange={(e) => handleFontSelect(e.target.value, true)}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-white"
-                  >
-                    {getAllFonts().map(font => (
-                      <option key={font.family} value={font.family}>
-                        {font.name} ({FONT_CATEGORY_NAMES[font.category]})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/* Font Sizes */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-semibold text-neutral-300 mb-2 block">Title Size</label>
-                  <select
-                    value={currentStyle.titleFontSize}
-                    onChange={(e) => updateStyle({ titleFontSize: e.target.value })}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-2 text-white"
-                  >
-                    <option value="1.5rem">Small</option>
-                    <option value="2rem">Medium</option>
-                    <option value="2.5rem">Large</option>
-                    <option value="3rem">Extra Large</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-semibold text-neutral-300 mb-2 block">Text Size</label>
-                  <select
-                    value={currentStyle.textFontSize}
-                    onChange={(e) => updateStyle({ textFontSize: e.target.value })}
-                    className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-2 text-white"
-                  >
-                    <option value="0.9rem">Small</option>
-                    <option value="1rem">Medium</option>
-                    <option value="1.1rem">Large</option>
-                    <option value="1.25rem">Extra Large</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Colors Tab */}
-          {activeTab === 'colors' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="text-sm font-semibold text-neutral-300 mb-2 block">Background</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={currentStyle.background.startsWith('#') ? currentStyle.background : '#1a1a2e'}
-                      onChange={(e) => updateStyle({ background: e.target.value })}
-                      className="w-12 h-12 rounded-lg cursor-pointer border-2 border-neutral-700"
-                    />
-                    <input
-                      type="text"
-                      value={currentStyle.background}
-                      onChange={(e) => updateStyle({ background: e.target.value })}
-                      className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 text-white text-sm"
-                      placeholder="Color or gradient CSS"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold text-neutral-300 mb-2 block">Text Color</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={currentStyle.textColor}
-                      onChange={(e) => updateStyle({ textColor: e.target.value })}
-                      className="w-12 h-12 rounded-lg cursor-pointer border-2 border-neutral-700"
-                    />
-                    <input
-                      type="text"
-                      value={currentStyle.textColor}
-                      onChange={(e) => updateStyle({ textColor: e.target.value })}
-                      className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 text-white text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold text-neutral-300 mb-2 block">Accent Color</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={currentStyle.accentColor}
-                      onChange={(e) => updateStyle({ accentColor: e.target.value })}
-                      className="w-12 h-12 rounded-lg cursor-pointer border-2 border-neutral-700"
-                    />
-                    <input
-                      type="text"
-                      value={currentStyle.accentColor}
-                      onChange={(e) => updateStyle({ accentColor: e.target.value })}
-                      className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 text-white text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold text-neutral-300 mb-2 block">Page Color (Book Mode)</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={currentStyle.pageColor}
-                      onChange={(e) => updateStyle({ pageColor: e.target.value })}
-                      className="w-12 h-12 rounded-lg cursor-pointer border-2 border-neutral-700"
-                    />
-                    <input
-                      type="text"
-                      value={currentStyle.pageColor}
-                      onChange={(e) => updateStyle({ pageColor: e.target.value })}
-                      className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 text-white text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Gradient Presets */}
-              <div>
-                <label className="text-sm font-semibold text-neutral-300 mb-3 block">Background Presets</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { name: 'Dark', value: '#0f0f1a' },
-                    { name: 'Warm Dark', value: '#1a1510' },
-                    { name: 'Ocean', value: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' },
-                    { name: 'Forest', value: 'linear-gradient(135deg, #1a2e1a 0%, #0f1f0f 100%)' },
-                    { name: 'Sunset', value: 'linear-gradient(135deg, #2e1a1a 0%, #1f0f0f 100%)' },
-                    { name: 'Royal', value: 'linear-gradient(135deg, #1a1a2e 0%, #2e1a2e 100%)' },
-                    { name: 'Parchment', value: '#d4c4a8' },
-                    { name: 'Cream', value: '#f5f0e6' },
-                  ].map(preset => (
-                    <button
-                      key={preset.name}
-                      onClick={() => updateStyle({ background: preset.value })}
-                      className={`p-3 rounded-lg border-2 transition-all ${
-                        currentStyle.background === preset.value
-                          ? 'border-indigo-500'
-                          : 'border-neutral-700 hover:border-neutral-500'
-                      }`}
-                      style={{ background: preset.value }}
-                    >
-                      <span className="text-xs font-medium text-white drop-shadow-lg">{preset.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Layout Tab */}
-          {activeTab === 'layout' && (
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-semibold text-neutral-300 mb-3 block">Layout Mode</label>
-                <div className="grid grid-cols-2 gap-4">
-                  {(Object.entries(LAYOUT_CONFIGS) as [LayoutMode, typeof LAYOUT_CONFIGS[LayoutMode]][]).map(([mode, config]) => (
-                    <button
-                      key={mode}
-                      onClick={() => updateStyle({ layoutMode: mode })}
-                      className={`p-4 rounded-xl border-2 text-left transition-all ${
-                        currentStyle.layoutMode === mode
-                          ? 'border-indigo-500 bg-indigo-500/10'
-                          : 'border-neutral-700 hover:border-neutral-500 bg-neutral-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 mb-2">
-                        {/* Layout preview icon */}
-                        <div className="w-12 h-8 rounded border border-neutral-600 flex overflow-hidden">
-                          {mode === 'standard' && (
-                            <div className="w-full h-full bg-neutral-700 flex items-center justify-center">
-                              <div className="w-6 h-4 bg-neutral-500 rounded-sm" />
-                            </div>
-                          )}
-                          {mode === 'book' && (
-                            <>
-                              <div className="w-1/2 h-full bg-neutral-600 flex items-center justify-center">
-                                <div className="w-4 h-4 bg-neutral-400 rounded-sm" />
-                              </div>
-                              <div className="w-1/2 h-full bg-neutral-700 flex items-center justify-center">
-                                <div className="w-4 h-1 bg-neutral-500 rounded-sm" />
-                              </div>
-                            </>
-                          )}
-                          {mode === 'scroll' && (
-                            <div className="w-full h-full bg-neutral-700 flex flex-col items-center justify-center gap-0.5 py-1">
-                              <div className="w-6 h-0.5 bg-neutral-500 rounded-sm" />
-                              <div className="w-6 h-0.5 bg-neutral-500 rounded-sm" />
-                              <div className="w-4 h-0.5 bg-neutral-500 rounded-sm" />
-                            </div>
-                          )}
-                          {mode === 'manuscript' && (
-                            <div className="w-full h-full bg-amber-900/30 border-2 border-amber-700/50 flex items-center justify-center">
-                              <div className="w-4 h-4 bg-amber-600/30 rounded-sm" />
-                            </div>
-                          )}
-                        </div>
-                        <span className="font-semibold text-white">{config.name}</span>
-                      </div>
-                      <p className="text-xs text-neutral-400">{config.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Book-specific options */}
-              {currentStyle.layoutMode === 'book' && (
-                <div className="space-y-4 p-4 bg-neutral-800 rounded-xl">
-                  <h4 className="font-semibold text-white">Book Options</h4>
-                  
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="pageShadow"
-                      checked={currentStyle.pageShadow}
-                      onChange={(e) => updateStyle({ pageShadow: e.target.checked })}
-                      className="rounded border-neutral-600"
-                    />
-                    <label htmlFor="pageShadow" className="text-sm text-neutral-300">
-                      Page shadows (3D effect)
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-neutral-300 mb-2 block">Ornament Style</label>
-                    <select
-                      value={currentStyle.ornamentStyle}
-                      onChange={(e) => updateStyle({ ornamentStyle: e.target.value as StoryStyle['ornamentStyle'] })}
-                      className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2 text-white"
-                    >
-                      <option value="none">None</option>
-                      <option value="simple">Simple</option>
-                      <option value="elegant">Elegant</option>
-                      <option value="medieval">Medieval</option>
-                      <option value="art-nouveau">Art Nouveau</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-neutral-300 mb-2 block">Page Edge Color</label>
-                    <input
-                      type="color"
-                      value={currentStyle.pageEdgeColor}
-                      onChange={(e) => updateStyle({ pageEdgeColor: e.target.value })}
-                      className="w-full h-10 rounded-lg cursor-pointer border-2 border-neutral-600"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Animation */}
-              <div>
-                <label className="text-sm font-semibold text-neutral-300 mb-3 block">Page Transition</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {(['fade-in', 'slide-up', 'zoom-in', 'blur-in'] as const).map(anim => (
-                    <button
-                      key={anim}
-                      onClick={() => updateStyle({ animationClass: anim })}
-                      className={`p-3 rounded-lg border-2 capitalize transition-all ${
-                        currentStyle.animationClass === anim
-                          ? 'border-indigo-500 bg-indigo-500/10 text-white'
-                          : 'border-neutral-700 hover:border-neutral-500 text-neutral-300'
-                      }`}
-                    >
-                      {anim.replace('-', ' ')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Texture Tab */}
-          {activeTab === 'texture' && (
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-semibold text-neutral-300 mb-3 block">Texture Type</label>
-                <div className="grid grid-cols-4 gap-3">
-                  {(Object.entries(TEXTURE_PATTERNS) as [TextureType, typeof TEXTURE_PATTERNS[TextureType]][]).map(([type, config]) => (
-                    <button
-                      key={type}
-                      onClick={() => updateStyle({ 
-                        textureType: type,
-                        textureColor: config.defaultColor
-                      })}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        currentStyle.textureType === type
-                          ? 'border-indigo-500 bg-indigo-500/10'
-                          : 'border-neutral-700 hover:border-neutral-500'
-                      }`}
-                    >
-                      <div 
-                        className="w-full h-16 rounded-lg mb-2 border border-neutral-600"
-                        style={{
-                          background: type === 'none' 
-                            ? 'repeating-linear-gradient(45deg, #333 0, #333 10px, #444 10px, #444 20px)'
-                            : config.defaultColor
-                        }}
-                      />
-                      <span className="text-sm font-medium text-neutral-200">{config.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {currentStyle.textureType !== 'none' && (
-                <>
-                  <div>
-                    <label className="text-sm font-semibold text-neutral-300 mb-2 block">Texture Color</label>
-                    <input
-                      type="color"
-                      value={currentStyle.textureColor}
-                      onChange={(e) => updateStyle({ textureColor: e.target.value })}
-                      className="w-full h-12 rounded-lg cursor-pointer border-2 border-neutral-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-semibold text-neutral-300 mb-2 block">
-                      Texture Opacity: {Math.round((currentStyle.textureOpacity || 0.3) * 100)}%
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={currentStyle.textureOpacity}
-                      onChange={(e) => updateStyle({ textureOpacity: parseFloat(e.target.value) })}
-                      className="w-full"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Visual Novel Tab */}
-          {activeTab === 'vn' && (
-            <div className="space-y-6">
-              <p className="text-sm text-neutral-400">
-                Configure default image generation settings for Visual Novel mode. These settings will be used when generating backgrounds and character sprites.
-              </p>
-
-              {/* Global Quality & Style Settings */}
-              <div className="p-4 bg-gradient-to-br from-purple-900/30 to-indigo-900/30 rounded-xl space-y-4 border border-purple-500/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles size={18} className="text-purple-400" />
-                  <h4 className="font-semibold text-white">Default Quality & Style</h4>
-                </div>
-                <p className="text-xs text-neutral-400 mb-3">
-                  These settings apply to all image generation in the story.
-                </p>
-                <ImageGenerationControls
-                  model={(currentStyle.vnBackgroundModel as ImageModel) || 'flux-schnell'}
-                  quality={(currentStyle.imageQuality as ImageQuality) || 'medium'}
-                  style={(currentStyle.imageStyle as ImageStyle) || 'illustration'}
-                  onModelChange={(m) => updateStyle({ vnBackgroundModel: m, vnCharacterModel: m })}
-                  onQualityChange={(q) => updateStyle({ imageQuality: q })}
-                  onStyleChange={(s) => updateStyle({ imageStyle: s })}
-                />
-              </div>
-
-              {/* Background Settings */}
-              <div className="p-4 bg-neutral-800 rounded-xl space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <ImageIcon size={18} className="text-indigo-400" />
-                  <h4 className="font-semibold text-white">Background Generation</h4>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-neutral-300 mb-2 block">Model</label>
-                    <select
-                      value={currentStyle.vnBackgroundModel || 'flux-schnell'}
-                      onChange={(e) => updateStyle({ vnBackgroundModel: e.target.value as StoryStyle['vnBackgroundModel'] })}
-                      className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
-                    >
-                      <option value="flux-schnell">Flux Schnell ⚡</option>
-                      <option value="sdxl">SDXL (Alta Qualità)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-neutral-300 mb-2 block">Format</label>
-                    <div className="flex gap-2">
-                      {[
-                        { w: 1024, h: 576, label: '16:9' },
-                        { w: 768, h: 512, label: '3:2' },
-                        { w: 512, h: 512, label: '1:1' },
-                      ].map(({ w, h, label }) => (
-                        <button
-                          key={label}
-                          onClick={() => updateStyle({ vnBackgroundWidth: w, vnBackgroundHeight: h })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
-                            (currentStyle.vnBackgroundWidth || 1024) === w && (currentStyle.vnBackgroundHeight || 576) === h
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600 border border-neutral-600'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Character Settings */}
-              <div className="p-4 bg-neutral-800 rounded-xl space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <User size={18} className="text-pink-400" />
-                  <h4 className="font-semibold text-white">Character Sprite Generation</h4>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm text-neutral-300 mb-2 block">Model</label>
-                    <select
-                      value={currentStyle.vnCharacterModel || 'sdxl'}
-                      onChange={(e) => updateStyle({ vnCharacterModel: e.target.value as StoryStyle['vnCharacterModel'] })}
-                      className="w-full bg-neutral-700 border border-neutral-600 rounded-lg p-2.5 text-white text-sm"
-                    >
-                      <option value="flux-schnell">Flux Schnell ⚡</option>
-                      <option value="sdxl">SDXL (Alta Qualità)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm text-neutral-300 mb-2 block">Format</label>
-                    <div className="flex gap-2">
-                      {[
-                        { w: 512, h: 768, label: '2:3' },
-                        { w: 512, h: 512, label: '1:1' },
-                        { w: 768, h: 512, label: '3:2' },
-                      ].map(({ w, h, label }) => (
-                        <button
-                          key={label}
-                          onClick={() => updateStyle({ vnCharacterWidth: w, vnCharacterHeight: h })}
-                          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
-                            (currentStyle.vnCharacterWidth || 512) === w && (currentStyle.vnCharacterHeight || 768) === h
-                              ? 'bg-pink-600 text-white'
-                              : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600 border border-neutral-600'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-xs text-neutral-500">
-                  Tip: Use 2:3 portrait format for character sprites to fit the visual novel layout.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* AI Generate Tab */}
-          {activeTab === 'ai' && (
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-semibold text-neutral-300 mb-2 block">
-                  Describe the style you want
-                </label>
-                <textarea
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder="e.g., 'Ancient medieval manuscript with parchment texture and gothic fonts' or 'Modern sci-fi with neon accents and futuristic typography'"
-                  className="w-full h-32 bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-white placeholder-neutral-500 resize-none"
-                />
-              </div>
-
-              <button
-                onClick={() => onGenerateStyle?.(aiPrompt)}
-                disabled={isGenerating || !aiPrompt.trim()}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={18} />
-                    Generate Style with AI
-                  </>
-                )}
-              </button>
-
-              {/* Quick presets */}
-              <div>
-                <label className="text-sm font-semibold text-neutral-300 mb-3 block">Quick Presets</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { name: 'Medieval Fantasy', prompt: 'Medieval fantasy book with parchment pages, gothic calligraphy, and ornate decorations' },
-                    { name: 'Victorian Gothic', prompt: 'Victorian gothic novel with dark elegant fonts, sepia tones, and art nouveau ornaments' },
-                    { name: 'Fairy Tale', prompt: 'Enchanted fairy tale with whimsical handwritten fonts, soft pastel colors, and magical sparkles' },
-                    { name: 'Horror', prompt: 'Dark horror story with creepy distorted fonts, blood red accents, and grungy textures' },
-                    { name: 'Sci-Fi', prompt: 'Futuristic sci-fi with clean modern fonts, neon blue accents, and holographic effects' },
-                    { name: 'Ancient Manuscript', prompt: 'Ancient illuminated manuscript with calligraphic fonts, gold accents, and aged parchment' },
-                  ].map(preset => (
-                    <button
-                      key={preset.name}
-                      onClick={() => setAiPrompt(preset.prompt)}
-                      className="p-3 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-left transition-colors"
-                    >
-                      <span className="text-sm font-medium text-white">{preset.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer with preview */}
-        <div className="border-t border-neutral-800 p-4">
-          <div 
-            className="rounded-xl p-6 mb-4"
-            style={{
-              background: currentStyle.background,
-              fontFamily: currentStyle.fontFamily,
-            }}
+        {/* Footer */}
+        <div className="flex justify-end gap-3 p-4 border-t border-neutral-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700 transition-colors text-sm"
           >
-            <h3 
-              className="text-xl mb-2"
-              style={{ 
-                color: currentStyle.textColor,
-                fontFamily: currentStyle.titleFontFamily,
-                fontSize: currentStyle.titleFontSize,
-              }}
-            >
-              Preview Title
-            </h3>
-            <p 
-              style={{ 
-                color: currentStyle.textColor,
-                fontSize: currentStyle.textFontSize,
-              }}
-            >
-              This is how your story text will appear with the current style settings.
-            </p>
-            <button
-              className="mt-3 px-4 py-2 rounded-lg font-medium"
-              style={{
-                background: currentStyle.accentColor,
-                color: currentStyle.background.startsWith('#') && currentStyle.background.length === 7 
-                  ? (parseInt(currentStyle.background.slice(1), 16) > 0x7fffff ? '#000' : '#fff')
-                  : '#fff'
-              }}
-            >
-              Choice Button
-            </button>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="px-6 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onClose}
-              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-medium"
-            >
-              Apply Style
-            </button>
-          </div>
+            Annulla
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors text-sm font-medium"
+          >
+            Applica Stile
+          </button>
         </div>
       </div>
     </div>
